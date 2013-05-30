@@ -190,6 +190,7 @@ struct tcp_ss9006_client {
 		struct x_timer watchdog;
 	} timers;
 	struct tcp_ss9006_client_flags {
+		unsigned int control:1;
 		unsigned int close:1;
 	} flags;
 	// debug
@@ -300,6 +301,7 @@ int main(int argc, char **argv)
 	struct ss9006_combined_header *tcp_ss9006_combined_header;
 	struct ss9006_combined_chunk_header *tcp_ss9006_combined_chunk_header;
 	struct ss9006_sim_status_response *tcp_ss9006_sim_status_response;
+	struct ss9006_sim_extension_request *tcp_ss9006_sim_extension_request;
 
 	// get options
 	while ((opt = getopt(argc, argv, options)) != -1) {
@@ -1603,6 +1605,53 @@ int main(int argc, char **argv)
 										} else {
 											// invalid index
 											LOG("%s: Reset SIM #%03lu failed - SIM index out of range=[0;%u]\n", tcp_ss9006_clients[i].prefix, (unsigned long int)tcp_ss9006_sim_generic_request->sim, SBG4_SIMCARD_MAX - 1);
+										}
+										tcp_ss9006_clients[i].recv_length = 0;
+										tcp_ss9006_clients[i].recv_wait = sizeof(struct ss9006_base_header);
+									}
+								}
+								break;
+							case SS9006_OPC_EXTENSION:
+								if (tcp_ss9006_clients[i].recv_wait < sizeof(struct ss9006_sim_extension_request)) {
+									tcp_ss9006_clients[i].recv_wait = sizeof(struct ss9006_sim_extension_request);
+								} else {
+									if (tcp_ss9006_clients[i].recv_length >= sizeof(struct ss9006_sim_extension_request)) {
+										tcp_ss9006_sim_extension_request = (struct ss9006_sim_extension_request *)tcp_ss9006_clients[i].recv_buf;
+										switch (tcp_ss9006_sim_extension_request->opc) {
+											case SS9006_EXT_OPC_CLI_CONTROL_SET:
+												tcp_ss9006_clients[i].flags.control = 1;
+												break;
+											case SS9006_EXT_OPC_CLI_INFO:
+												for (j = 0; j < ss9006_client_count; j++) {
+													if ((i != j) && (tcp_ss9006_clients[j].sock >= 0)) {
+														tcp_ss9006_clients[i].xmit_buf[tcp_ss9006_clients[i].xmit_length + 0] = SS9006_OPC_EXTENSION;
+														tcp_ss9006_clients[i].xmit_buf[tcp_ss9006_clients[i].xmit_length + 1] = SS9006_EXT_OPC_CLI_INFO;
+														tcp_ss9006_clients[i].xmit_buf[tcp_ss9006_clients[i].xmit_length + 2] = (u_int8_t)j;
+														tcp_ss9006_clients[i].xmit_length += 3;
+													}
+												}
+												break;
+											case SS9006_EXT_OPC_SIM_INFO:
+												for (j = 0; j < SBG4_SIMCARD_MAX; j++) {
+													tcp_ss9006_clients[i].xmit_buf[tcp_ss9006_clients[i].xmit_length + 0] = SS9006_OPC_EXTENSION;
+													tcp_ss9006_clients[i].xmit_buf[tcp_ss9006_clients[i].xmit_length + 1] = SS9006_EXT_OPC_SIM_INFO;
+													tcp_ss9006_clients[i].xmit_buf[tcp_ss9006_clients[i].xmit_length + 2] = (u_int8_t)j;
+													tcp_ss9006_clients[i].xmit_buf[tcp_ss9006_clients[i].xmit_length + 3] = (u_int8_t)(simcards[j].flags.inserted);
+													tcp_ss9006_clients[i].xmit_buf[tcp_ss9006_clients[i].xmit_length + 4] = (u_int8_t)((simcards[j].client < 0)?(0xff):(simcards[j].client));
+													tcp_ss9006_clients[i].xmit_length += 5;
+												}
+												break;
+											case SS9006_EXT_OPC_KEEP_ALIVE:
+												tcp_ss9006_clients[i].xmit_buf[tcp_ss9006_clients[i].xmit_length + 0] = SS9006_OPC_EXTENSION;
+												tcp_ss9006_clients[i].xmit_buf[tcp_ss9006_clients[i].xmit_length + 1] = SS9006_EXT_OPC_KEEP_ALIVE;
+												tcp_ss9006_clients[i].xmit_buf[tcp_ss9006_clients[i].xmit_length + 2] = 0;
+												tcp_ss9006_clients[i].xmit_length += 3;
+												break;
+											default:
+												LOG("%s: Unknown SS9006_EXT_OPC=0x%02x\n", tcp_ss9006_clients[i].prefix, tcp_ss9006_sim_extension_request->opc);
+												// set close flag
+												tcp_ss9006_clients[i].flags.close = 1;
+												break;
 										}
 										tcp_ss9006_clients[i].recv_length = 0;
 										tcp_ss9006_clients[i].recv_wait = sizeof(struct ss9006_base_header);
