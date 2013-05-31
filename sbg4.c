@@ -281,12 +281,12 @@ int main(int argc, char **argv)
 	pid_t pid;
 	FILE *fp;
 	int res;
-	size_t i;
-	size_t j;
+	size_t i, j, k;
 
 	ssize_t rlen;
 
 	u_int16_t tmpu16;
+	u_int32_t tmpu32, tmpu32net;
 	int tmp_flags;
 	int tmp_opt;
 
@@ -646,6 +646,17 @@ int main(int argc, char **argv)
 					}
 					if (simcards[i].flags.inserted) {
 						LOG("%s: removed\n",simcards[i].prefix);
+						// notify sim state
+						for (k = 0; k < ss9006_client_count; k++) {
+							if ((tcp_ss9006_clients[k].sock >= 0) && (tcp_ss9006_clients[k].flags.control)) {
+								tcp_ss9006_clients[k].xmit_buf[tcp_ss9006_clients[k].xmit_length + 0] = SS9006_OPC_EXTENSION;
+								tcp_ss9006_clients[k].xmit_buf[tcp_ss9006_clients[k].xmit_length + 1] = SS9006_EXT_OPC_SIM_INFO;
+								tcp_ss9006_clients[k].xmit_buf[tcp_ss9006_clients[k].xmit_length + 2] = (u_int8_t)i;
+								tcp_ss9006_clients[k].xmit_buf[tcp_ss9006_clients[k].xmit_length + 3] = 0; // inserted
+								tcp_ss9006_clients[k].xmit_buf[tcp_ss9006_clients[k].xmit_length + 4] = 0xff; // client
+								tcp_ss9006_clients[k].xmit_length += 5;
+							}
+						}
 					}
 					simcards[i].flags.inserted = 0;
 					simcards[i].flags.blocked = 0;
@@ -828,6 +839,34 @@ int main(int argc, char **argv)
 						LOG("%s: Unbind SIM #%03lu succeeded\n", tcp_ss9006_clients[i].prefix, (long unsigned int)j);
 						// start status timer
 						x_timer_set_ms(simcards[j].timers.status, 0);
+						// notify sim state
+						for (k = 0; k < ss9006_client_count; k++) {
+							if ((tcp_ss9006_clients[k].sock >= 0) && (tcp_ss9006_clients[k].flags.control)) {
+								tcp_ss9006_clients[k].xmit_buf[tcp_ss9006_clients[k].xmit_length + 0] = SS9006_OPC_EXTENSION;
+								tcp_ss9006_clients[k].xmit_buf[tcp_ss9006_clients[k].xmit_length + 1] = SS9006_EXT_OPC_SIM_INFO;
+								tcp_ss9006_clients[k].xmit_buf[tcp_ss9006_clients[k].xmit_length + 2] = (u_int8_t)j;
+								tcp_ss9006_clients[k].xmit_buf[tcp_ss9006_clients[k].xmit_length + 3] = 1; // inserted
+								tcp_ss9006_clients[k].xmit_buf[tcp_ss9006_clients[k].xmit_length + 4] = 0xff; // client
+								tcp_ss9006_clients[k].xmit_length += 5;
+							}
+						}
+					}
+				}
+				// notify client state
+				for (j = 0; j < ss9006_client_count; j++) {
+					if ((tcp_ss9006_clients[j].sock >= 0) && (tcp_ss9006_clients[j].flags.control)) {
+						tcp_ss9006_clients[j].xmit_buf[tcp_ss9006_clients[j].xmit_length + 0] = SS9006_OPC_EXTENSION;
+						tcp_ss9006_clients[j].xmit_buf[tcp_ss9006_clients[j].xmit_length + 1] = SS9006_EXT_OPC_CLI_INFO;
+						tcp_ss9006_clients[j].xmit_buf[tcp_ss9006_clients[j].xmit_length + 2] = (u_int8_t)i;
+						tcp_ss9006_clients[j].xmit_buf[tcp_ss9006_clients[j].xmit_length + 3] = 0; // present
+						tcp_ss9006_clients[j].xmit_buf[tcp_ss9006_clients[j].xmit_length + 4] = 0; // self
+						tcp_ss9006_clients[j].xmit_length += 5;
+						tmpu32net = 0;
+						memcpy(&tcp_ss9006_clients[j].xmit_buf[tcp_ss9006_clients[j].xmit_length], &tmpu32net, 4);
+						tcp_ss9006_clients[j].xmit_length += 4;
+						tmpu32net = 0;
+						memcpy(&tcp_ss9006_clients[j].xmit_buf[tcp_ss9006_clients[j].xmit_length], &tmpu32net, 4);
+						tcp_ss9006_clients[j].xmit_length += 4;
 					}
 				}
 			}
@@ -938,6 +977,17 @@ int main(int argc, char **argv)
 												// set SIM-card flag to inserted
 												if (!simcards[i].flags.inserted) {
 													LOG("%s: inserted\n", simcards[i].prefix);
+													// notify sim state
+													for (k = 0; k < ss9006_client_count; k++) {
+														if ((tcp_ss9006_clients[k].sock >= 0) && (tcp_ss9006_clients[k].flags.control)) {
+															tcp_ss9006_clients[k].xmit_buf[tcp_ss9006_clients[k].xmit_length + 0] = SS9006_OPC_EXTENSION;
+															tcp_ss9006_clients[k].xmit_buf[tcp_ss9006_clients[k].xmit_length + 1] = SS9006_EXT_OPC_SIM_INFO;
+															tcp_ss9006_clients[k].xmit_buf[tcp_ss9006_clients[k].xmit_length + 2] = (u_int8_t)i;
+															tcp_ss9006_clients[k].xmit_buf[tcp_ss9006_clients[k].xmit_length + 3] = 1; // inserted
+															tcp_ss9006_clients[k].xmit_buf[tcp_ss9006_clients[k].xmit_length + 4] = 0xff; // client
+															tcp_ss9006_clients[k].xmit_length += 5;
+														}
+													}
 												}
 												simcards[i].flags.inserted = 1;
 												// check for SIM binding with client
@@ -1009,6 +1059,17 @@ int main(int argc, char **argv)
 										// set SIM-card flag to inserted
 										if (!simcards[i].flags.inserted) {
 											LOG("%s: inserted\n", simcards[i].prefix);
+											// notify sim state
+											for (k = 0; k < ss9006_client_count; k++) {
+												if ((tcp_ss9006_clients[k].sock >= 0) && (tcp_ss9006_clients[k].flags.control)) {
+													tcp_ss9006_clients[k].xmit_buf[tcp_ss9006_clients[k].xmit_length + 0] = SS9006_OPC_EXTENSION;
+													tcp_ss9006_clients[k].xmit_buf[tcp_ss9006_clients[k].xmit_length + 1] = SS9006_EXT_OPC_SIM_INFO;
+													tcp_ss9006_clients[k].xmit_buf[tcp_ss9006_clients[k].xmit_length + 2] = (u_int8_t)i;
+													tcp_ss9006_clients[k].xmit_buf[tcp_ss9006_clients[k].xmit_length + 3] = 1; // inserted
+													tcp_ss9006_clients[k].xmit_buf[tcp_ss9006_clients[k].xmit_length + 4] = 0xff; // client
+													tcp_ss9006_clients[k].xmit_length += 5;
+												}
+											}
 										}
 										simcards[i].flags.inserted = 1;
 										// check for SIM binding with client
@@ -1178,6 +1239,25 @@ int main(int argc, char **argv)
 								x_timer_set_second(tcp_ss9006_clients[i].timers.auth, 5);
 								// start watchdog timer
 								x_timer_set_second(tcp_ss9006_clients[i].timers.watchdog, 30);
+								// notify client state
+								for (j = 0; j < ss9006_client_count; j++) {
+									if ((tcp_ss9006_clients[j].sock >= 0) && (tcp_ss9006_clients[j].flags.control) && (i != j)) {
+										tcp_ss9006_clients[j].xmit_buf[tcp_ss9006_clients[j].xmit_length + 0] = SS9006_OPC_EXTENSION;
+										tcp_ss9006_clients[j].xmit_buf[tcp_ss9006_clients[j].xmit_length + 1] = SS9006_EXT_OPC_CLI_INFO;
+										tcp_ss9006_clients[j].xmit_buf[tcp_ss9006_clients[j].xmit_length + 2] = (u_int8_t)i;
+										tcp_ss9006_clients[j].xmit_buf[tcp_ss9006_clients[j].xmit_length + 3] = 1; // present
+										tcp_ss9006_clients[j].xmit_buf[tcp_ss9006_clients[j].xmit_length + 4] = 0; // self
+										tcp_ss9006_clients[j].xmit_length += 5;
+										tmpu32 = sprintf((char *)&tcp_ss9006_clients[j].xmit_buf[tcp_ss9006_clients[j].xmit_length + 4], "%s", inet_ntoa(tcp_ss9006_clients[i].addr.sin_addr));
+										tmpu32net = htonl(tmpu32);
+										memcpy(&tcp_ss9006_clients[j].xmit_buf[tcp_ss9006_clients[j].xmit_length], &tmpu32net, 4);
+										tcp_ss9006_clients[j].xmit_length += 4 + tmpu32;
+										tmpu32 = sprintf((char *)&tcp_ss9006_clients[j].xmit_buf[tcp_ss9006_clients[j].xmit_length + 4], "%u", ntohs(tcp_ss9006_clients[i].addr.sin_port));
+										tmpu32net = htonl(tmpu32);
+										memcpy(&tcp_ss9006_clients[j].xmit_buf[tcp_ss9006_clients[j].xmit_length], &tmpu32net, 4);
+										tcp_ss9006_clients[j].xmit_length += 4 + tmpu32;
+									}
+								}
 								break;
 							}
 						}
@@ -1464,6 +1544,17 @@ int main(int argc, char **argv)
 														LOG("%s: Bind SIM #%03lu succeeded\n", tcp_ss9006_clients[i].prefix, (unsigned long int)tcp_ss9006_sim_generic_request->sim);
 														// set SIM owner client
 														simcards[tcp_ss9006_sim_generic_request->sim].client = i;
+														// notify sim state
+														for (k = 0; k < ss9006_client_count; k++) {
+															if ((tcp_ss9006_clients[k].sock >= 0) && (tcp_ss9006_clients[k].flags.control)) {
+																tcp_ss9006_clients[k].xmit_buf[tcp_ss9006_clients[k].xmit_length + 0] = SS9006_OPC_EXTENSION;
+																tcp_ss9006_clients[k].xmit_buf[tcp_ss9006_clients[k].xmit_length + 1] = SS9006_EXT_OPC_SIM_INFO;
+																tcp_ss9006_clients[k].xmit_buf[tcp_ss9006_clients[k].xmit_length + 2] = (u_int8_t)tcp_ss9006_sim_generic_request->sim;
+																tcp_ss9006_clients[k].xmit_buf[tcp_ss9006_clients[k].xmit_length + 3] = 1; // inserted
+																tcp_ss9006_clients[k].xmit_buf[tcp_ss9006_clients[k].xmit_length + 4] = (u_int8_t)i; // client
+																tcp_ss9006_clients[k].xmit_length += 5;
+															}
+														}
 													} else if (simcards[tcp_ss9006_sim_generic_request->sim].client == i) {
 														// this client
 														LOG("%s: Bind SIM #%03lu failed - SIM already binded with this client\n", tcp_ss9006_clients[i].prefix, (unsigned long int)tcp_ss9006_sim_generic_request->sim);
@@ -1504,6 +1595,17 @@ int main(int argc, char **argv)
 													LOG("%s: Unbind SIM #%03lu succeeded\n", tcp_ss9006_clients[i].prefix, (unsigned long int)tcp_ss9006_sim_generic_request->sim);
 													// clear SIM owner client
 													simcards[tcp_ss9006_sim_generic_request->sim].client = -1;
+													// notify sim state
+													for (k = 0; k < ss9006_client_count; k++) {
+														if ((tcp_ss9006_clients[k].sock >= 0) && (tcp_ss9006_clients[k].flags.control)) {
+															tcp_ss9006_clients[k].xmit_buf[tcp_ss9006_clients[k].xmit_length + 0] = SS9006_OPC_EXTENSION;
+															tcp_ss9006_clients[k].xmit_buf[tcp_ss9006_clients[k].xmit_length + 1] = SS9006_EXT_OPC_SIM_INFO;
+															tcp_ss9006_clients[k].xmit_buf[tcp_ss9006_clients[k].xmit_length + 2] = (u_int8_t)tcp_ss9006_sim_generic_request->sim;
+															tcp_ss9006_clients[k].xmit_buf[tcp_ss9006_clients[k].xmit_length + 3] = 1; // inserted
+															tcp_ss9006_clients[k].xmit_buf[tcp_ss9006_clients[k].xmit_length + 4] = 0xff; // client
+															tcp_ss9006_clients[k].xmit_length += 5;
+														}
+													}
 												} else if (simcards[tcp_ss9006_sim_generic_request->sim].client < 0) {
 													// free
 													LOG("%s: Unbind SIM #%03lu failed - SIM was not binded\n", tcp_ss9006_clients[i].prefix, (unsigned long int)tcp_ss9006_sim_generic_request->sim);
@@ -1623,12 +1725,20 @@ int main(int argc, char **argv)
 												break;
 											case SS9006_EXT_OPC_CLI_INFO:
 												for (j = 0; j < ss9006_client_count; j++) {
-													if ((i != j) && (tcp_ss9006_clients[j].sock >= 0)) {
-														tcp_ss9006_clients[i].xmit_buf[tcp_ss9006_clients[i].xmit_length + 0] = SS9006_OPC_EXTENSION;
-														tcp_ss9006_clients[i].xmit_buf[tcp_ss9006_clients[i].xmit_length + 1] = SS9006_EXT_OPC_CLI_INFO;
-														tcp_ss9006_clients[i].xmit_buf[tcp_ss9006_clients[i].xmit_length + 2] = (u_int8_t)j;
-														tcp_ss9006_clients[i].xmit_length += 3;
-													}
+													tcp_ss9006_clients[i].xmit_buf[tcp_ss9006_clients[i].xmit_length + 0] = SS9006_OPC_EXTENSION;
+													tcp_ss9006_clients[i].xmit_buf[tcp_ss9006_clients[i].xmit_length + 1] = SS9006_EXT_OPC_CLI_INFO;
+													tcp_ss9006_clients[i].xmit_buf[tcp_ss9006_clients[i].xmit_length + 2] = (u_int8_t)j;
+													tcp_ss9006_clients[i].xmit_buf[tcp_ss9006_clients[i].xmit_length + 3] = (tcp_ss9006_clients[j].sock >= 0)?1:0; // present
+													tcp_ss9006_clients[i].xmit_buf[tcp_ss9006_clients[i].xmit_length + 4] = (i == j)?1:0; // self
+													tcp_ss9006_clients[i].xmit_length += 5;
+													tmpu32 = sprintf((char *)&tcp_ss9006_clients[i].xmit_buf[tcp_ss9006_clients[i].xmit_length + 4], "%s", inet_ntoa(tcp_ss9006_clients[j].addr.sin_addr));
+													tmpu32net = htonl(tmpu32);
+													memcpy(&tcp_ss9006_clients[i].xmit_buf[tcp_ss9006_clients[i].xmit_length], &tmpu32net, 4);
+													tcp_ss9006_clients[i].xmit_length += 4 + tmpu32;
+													tmpu32 = sprintf((char *)&tcp_ss9006_clients[i].xmit_buf[tcp_ss9006_clients[i].xmit_length + 4], "%u", ntohs(tcp_ss9006_clients[j].addr.sin_port));
+													tmpu32net = htonl(tmpu32);
+													memcpy(&tcp_ss9006_clients[i].xmit_buf[tcp_ss9006_clients[i].xmit_length], &tmpu32net, 4);
+													tcp_ss9006_clients[i].xmit_length += 4 + tmpu32;
 												}
 												break;
 											case SS9006_EXT_OPC_SIM_INFO:
@@ -1688,6 +1798,34 @@ int main(int argc, char **argv)
 								LOG("%s: Unbind SIM #%03lu succeeded\n", tcp_ss9006_clients[i].prefix, (long unsigned int)j);
 								// start status timer
 								x_timer_set_ms(simcards[j].timers.status, 0);
+								// notify sim state
+								for (k = 0; k < ss9006_client_count; k++) {
+									if ((tcp_ss9006_clients[k].sock >= 0) && (tcp_ss9006_clients[k].flags.control)) {
+										tcp_ss9006_clients[k].xmit_buf[tcp_ss9006_clients[k].xmit_length + 0] = SS9006_OPC_EXTENSION;
+										tcp_ss9006_clients[k].xmit_buf[tcp_ss9006_clients[k].xmit_length + 1] = SS9006_EXT_OPC_SIM_INFO;
+										tcp_ss9006_clients[k].xmit_buf[tcp_ss9006_clients[k].xmit_length + 2] = (u_int8_t)j;
+										tcp_ss9006_clients[k].xmit_buf[tcp_ss9006_clients[k].xmit_length + 3] = 1; // inserted
+										tcp_ss9006_clients[k].xmit_buf[tcp_ss9006_clients[k].xmit_length + 4] = 0xff; // client
+										tcp_ss9006_clients[k].xmit_length += 5;
+									}
+								}
+							}
+						}
+						// notify client state
+						for (j = 0; j < ss9006_client_count; j++) {
+							if ((tcp_ss9006_clients[j].sock >= 0) && (tcp_ss9006_clients[j].flags.control)) {
+								tcp_ss9006_clients[j].xmit_buf[tcp_ss9006_clients[j].xmit_length + 0] = SS9006_OPC_EXTENSION;
+								tcp_ss9006_clients[j].xmit_buf[tcp_ss9006_clients[j].xmit_length + 1] = SS9006_EXT_OPC_CLI_INFO;
+								tcp_ss9006_clients[j].xmit_buf[tcp_ss9006_clients[j].xmit_length + 2] = (u_int8_t)i;
+								tcp_ss9006_clients[j].xmit_buf[tcp_ss9006_clients[j].xmit_length + 3] = 0; // present
+								tcp_ss9006_clients[j].xmit_buf[tcp_ss9006_clients[j].xmit_length + 4] = 0; // self
+								tcp_ss9006_clients[j].xmit_length += 5;
+								tmpu32net = 0;
+								memcpy(&tcp_ss9006_clients[j].xmit_buf[tcp_ss9006_clients[j].xmit_length], &tmpu32net, 4);
+								tcp_ss9006_clients[j].xmit_length += 4;
+								tmpu32net = 0;
+								memcpy(&tcp_ss9006_clients[j].xmit_buf[tcp_ss9006_clients[j].xmit_length], &tmpu32net, 4);
+								tcp_ss9006_clients[j].xmit_length += 4;
 							}
 						}
 					}
