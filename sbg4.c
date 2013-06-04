@@ -1388,17 +1388,17 @@ int main(int argc, char **argv)
 																			// Class not supported
 																			LOG("%s: Command to SIM #%03lu failed - command class=0x%02x not supported\n", tcp_ss9006_clients[i].prefix, (unsigned long int)tcp_ss9006_combined_chunk_header->sim, tcp_ss9006_clients[i].recv_buf[j]);
 																			// prepare command response
-																			tcp_ss9006_combined_header = (struct ss9006_combined_header *)&tcp_ss9006_clients[simcards[i].client].xmit_buf[tcp_ss9006_clients[simcards[i].client].xmit_length];
+																			tcp_ss9006_combined_header = (struct ss9006_combined_header *)&tcp_ss9006_clients[i].xmit_buf[tcp_ss9006_clients[i].xmit_length];
 																			tcp_ss9006_combined_header->cmd = SS9006_OPC_COMBINED;
 																			tcp_ss9006_combined_header->length = sizeof(struct ss9006_combined_chunk_header) + 2;
-																			tcp_ss9006_clients[simcards[i].client].xmit_length += sizeof(struct ss9006_combined_header);
-																			tcp_ss9006_combined_chunk_header = (struct ss9006_combined_chunk_header *)&tcp_ss9006_clients[simcards[i].client].xmit_buf[tcp_ss9006_clients[simcards[i].client].xmit_length];
+																			tcp_ss9006_clients[i].xmit_length += sizeof(struct ss9006_combined_header);
+																			tcp_ss9006_combined_chunk_header = (struct ss9006_combined_chunk_header *)&tcp_ss9006_clients[i].xmit_buf[tcp_ss9006_clients[i].xmit_length];
 																			tcp_ss9006_combined_chunk_header->sim = i;
 																			tcp_ss9006_combined_chunk_header->length = 2;
-																			tcp_ss9006_clients[simcards[i].client].xmit_length += sizeof(struct ss9006_combined_chunk_header);
-																			tcp_ss9006_clients[simcards[i].client].xmit_buf[tcp_ss9006_clients[simcards[i].client].xmit_length + 0] = 0x6e;
-																			tcp_ss9006_clients[simcards[i].client].xmit_buf[tcp_ss9006_clients[simcards[i].client].xmit_length + 1] = 0x00;
-																			tcp_ss9006_clients[simcards[i].client].xmit_length += 2;
+																			tcp_ss9006_clients[i].xmit_length += sizeof(struct ss9006_combined_chunk_header);
+																			tcp_ss9006_clients[i].xmit_buf[tcp_ss9006_clients[i].xmit_length + 0] = 0x6e;
+																			tcp_ss9006_clients[i].xmit_buf[tcp_ss9006_clients[i].xmit_length + 1] = 0x00;
+																			tcp_ss9006_clients[i].xmit_length += 2;
 																		}
 																	} else {
 																		// discard
