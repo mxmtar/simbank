@@ -156,7 +156,6 @@ struct simcard {
 		u_int32_t inserted:1;
 		u_int32_t reset:1;
 		u_int32_t reseting:1;
-		u_int32_t blocked:1;
 	} flags;
 	int state;
 	int client;
@@ -659,7 +658,6 @@ int main(int argc, char **argv)
 						}
 					}
 					simcards[i].flags.inserted = 0;
-					simcards[i].flags.blocked = 0;
 					simcards[i].state = SBG4_SIMCARD_STATE_DISABLE;
 					// start enable timer
 					x_timer_set_ms(simcards[i].timers.enable, 1000);
@@ -1473,22 +1471,16 @@ int main(int argc, char **argv)
 										if (tcp_ss9006_sim_generic_request->sim < SBG4_SIMCARD_MAX) {
 											// check for SIM insertion status
 											if (simcards[tcp_ss9006_sim_generic_request->sim].flags.inserted) {
-												// check for SIM blocking state
-												if (!simcards[tcp_ss9006_sim_generic_request->sim].flags.blocked) {
-													// check for SIM binding
-													if (simcards[tcp_ss9006_sim_generic_request->sim].client == i) {
-														// this
-														LOG("%s: SIM #%03lu LED On\n", tcp_ss9006_clients[i].prefix, (unsigned long int)tcp_ss9006_sim_generic_request->sim);
-													} else if (simcards[tcp_ss9006_sim_generic_request->sim].client < 0) {
-														// free
-														LOG("%s: SIM #%03lu LED On failed - SIM was not binded\n", tcp_ss9006_clients[i].prefix, (unsigned long int)tcp_ss9006_sim_generic_request->sim);
-													} else {
-														// another
-														LOG("%s: SIM #%03lu LED On failed - SIM was binded with another client\n", tcp_ss9006_clients[i].prefix, (unsigned long int)tcp_ss9006_sim_generic_request->sim);
-													}
+												// check for SIM binding
+												if (simcards[tcp_ss9006_sim_generic_request->sim].client == i) {
+													// this
+													LOG("%s: SIM #%03lu LED On\n", tcp_ss9006_clients[i].prefix, (unsigned long int)tcp_ss9006_sim_generic_request->sim);
+												} else if (simcards[tcp_ss9006_sim_generic_request->sim].client < 0) {
+													// free
+													LOG("%s: SIM #%03lu LED On failed - SIM was not binded\n", tcp_ss9006_clients[i].prefix, (unsigned long int)tcp_ss9006_sim_generic_request->sim);
 												} else {
-													// blocked
-													LOG("%s: SIM #%03lu LED On failed - SIM was blocked\n", tcp_ss9006_clients[i].prefix, (unsigned long int)tcp_ss9006_sim_generic_request->sim);
+													// another
+													LOG("%s: SIM #%03lu LED On failed - SIM was binded with another client\n", tcp_ss9006_clients[i].prefix, (unsigned long int)tcp_ss9006_sim_generic_request->sim);
 												}
 											} else {
 												// not inserted
@@ -1515,7 +1507,7 @@ int main(int argc, char **argv)
 										tcp_ss9006_clients[i].xmit_length += sizeof(struct ss9006_sim_status_response);
 										// traverse SIM-crd list
 										for (j = 0; j < SBG4_SIMCARD_MAX; j++) {
-											if ((simcards[j].flags.inserted) && (!simcards[j].flags.blocked) && ((simcards[j].client < 0) || (simcards[j].client == i))) {
+											if ((simcards[j].flags.inserted) && ((simcards[j].client < 0) || (simcards[j].client == i))) {
 												tcp_ss9006_sim_status_response->sim[j] = 1;
 											} else {
 												tcp_ss9006_sim_status_response->sim[j] = 0;
@@ -1536,35 +1528,29 @@ int main(int argc, char **argv)
 										if (tcp_ss9006_sim_generic_request->sim < SBG4_SIMCARD_MAX) {
 											// check for SIM insertion status
 											if (simcards[tcp_ss9006_sim_generic_request->sim].flags.inserted) {
-												// check for SIM blocking state
-												if (!simcards[tcp_ss9006_sim_generic_request->sim].flags.blocked) {
-													// check for SIM binding
-													if (simcards[tcp_ss9006_sim_generic_request->sim].client < 0) {
-														// free
-														LOG("%s: Bind SIM #%03lu succeeded\n", tcp_ss9006_clients[i].prefix, (unsigned long int)tcp_ss9006_sim_generic_request->sim);
-														// set SIM owner client
-														simcards[tcp_ss9006_sim_generic_request->sim].client = i;
-														// notify sim state
-														for (k = 0; k < ss9006_client_count; k++) {
-															if ((tcp_ss9006_clients[k].sock >= 0) && (tcp_ss9006_clients[k].flags.control)) {
-																tcp_ss9006_clients[k].xmit_buf[tcp_ss9006_clients[k].xmit_length + 0] = SS9006_OPC_EXTENSION;
-																tcp_ss9006_clients[k].xmit_buf[tcp_ss9006_clients[k].xmit_length + 1] = SS9006_EXT_OPC_SIM_INFO;
-																tcp_ss9006_clients[k].xmit_buf[tcp_ss9006_clients[k].xmit_length + 2] = (u_int8_t)tcp_ss9006_sim_generic_request->sim;
-																tcp_ss9006_clients[k].xmit_buf[tcp_ss9006_clients[k].xmit_length + 3] = 1; // inserted
-																tcp_ss9006_clients[k].xmit_buf[tcp_ss9006_clients[k].xmit_length + 4] = (u_int8_t)i; // client
-																tcp_ss9006_clients[k].xmit_length += 5;
-															}
+												// check for SIM binding
+												if (simcards[tcp_ss9006_sim_generic_request->sim].client < 0) {
+													// free
+													LOG("%s: Bind SIM #%03lu succeeded\n", tcp_ss9006_clients[i].prefix, (unsigned long int)tcp_ss9006_sim_generic_request->sim);
+													// set SIM owner client
+													simcards[tcp_ss9006_sim_generic_request->sim].client = i;
+													// notify sim state
+													for (k = 0; k < ss9006_client_count; k++) {
+														if ((tcp_ss9006_clients[k].sock >= 0) && (tcp_ss9006_clients[k].flags.control)) {
+															tcp_ss9006_clients[k].xmit_buf[tcp_ss9006_clients[k].xmit_length + 0] = SS9006_OPC_EXTENSION;
+															tcp_ss9006_clients[k].xmit_buf[tcp_ss9006_clients[k].xmit_length + 1] = SS9006_EXT_OPC_SIM_INFO;
+															tcp_ss9006_clients[k].xmit_buf[tcp_ss9006_clients[k].xmit_length + 2] = (u_int8_t)tcp_ss9006_sim_generic_request->sim;
+															tcp_ss9006_clients[k].xmit_buf[tcp_ss9006_clients[k].xmit_length + 3] = 1; // inserted
+															tcp_ss9006_clients[k].xmit_buf[tcp_ss9006_clients[k].xmit_length + 4] = (u_int8_t)i; // client
+															tcp_ss9006_clients[k].xmit_length += 5;
 														}
-													} else if (simcards[tcp_ss9006_sim_generic_request->sim].client == i) {
-														// this client
-														LOG("%s: Bind SIM #%03lu failed - SIM already binded with this client\n", tcp_ss9006_clients[i].prefix, (unsigned long int)tcp_ss9006_sim_generic_request->sim);
-													} else {
-														// another
-														LOG("%s: Bind SIM #%03lu failed - SIM was binded with another client\n", tcp_ss9006_clients[i].prefix, (unsigned long int)tcp_ss9006_sim_generic_request->sim);
 													}
+												} else if (simcards[tcp_ss9006_sim_generic_request->sim].client == i) {
+													// this client
+													LOG("%s: Bind SIM #%03lu failed - SIM already binded with this client\n", tcp_ss9006_clients[i].prefix, (unsigned long int)tcp_ss9006_sim_generic_request->sim);
 												} else {
-													// blocked
-													LOG("%s: Bind SIM #%03lu failed - SIM was blocked\n", tcp_ss9006_clients[i].prefix, (unsigned long int)tcp_ss9006_sim_generic_request->sim);
+													// another
+													LOG("%s: Bind SIM #%03lu failed - SIM was binded with another client\n", tcp_ss9006_clients[i].prefix, (unsigned long int)tcp_ss9006_sim_generic_request->sim);
 												}
 											} else {
 												// not inserted
@@ -1638,16 +1624,8 @@ int main(int argc, char **argv)
 											if (simcards[tcp_ss9006_sim_generic_request->sim].flags.inserted) {
 												// check for SIM binding
 												if (simcards[tcp_ss9006_sim_generic_request->sim].client == i) {
-													// this - check for SIM blocking state
-													if (simcards[tcp_ss9006_sim_generic_request->sim].flags.blocked) {
-														// blocked
-														LOG("%s: Block SIM #%03lu failed - SIM already blocked\n", tcp_ss9006_clients[i].prefix, (unsigned long int)tcp_ss9006_sim_generic_request->sim);
-													} else {
-														// unblocked
-														LOG("%s: Block SIM #%03lu succeeded\n", tcp_ss9006_clients[i].prefix, (unsigned long int)tcp_ss9006_sim_generic_request->sim);
-														// set flag for blocking SIM
-														simcards[tcp_ss9006_sim_generic_request->sim].flags.blocked = 1;
-													}
+													// this
+													LOG("%s: Block SIM #%03lu succeeded\n", tcp_ss9006_clients[i].prefix, (unsigned long int)tcp_ss9006_sim_generic_request->sim);
 												} else if (simcards[tcp_ss9006_sim_generic_request->sim].client < 0) {
 													// free
 													LOG("%s: Block SIM #%03lu failed - SIM was not binded\n", tcp_ss9006_clients[i].prefix, (unsigned long int)tcp_ss9006_sim_generic_request->sim);
@@ -1678,27 +1656,21 @@ int main(int argc, char **argv)
 										if (tcp_ss9006_sim_generic_request->sim < SBG4_SIMCARD_MAX) {
 											// check for SIM insertion status
 											if (simcards[tcp_ss9006_sim_generic_request->sim].flags.inserted) {
-												// check for SIM blocking state
-												if (!simcards[tcp_ss9006_sim_generic_request->sim].flags.blocked) {
-													// check for SIM binding
-													if (simcards[tcp_ss9006_sim_generic_request->sim].client == i) {
-														// this
-														if (!simcards[tcp_ss9006_sim_generic_request->sim].flags.reseting) {
-															LOG("%s: Reset SIM #%03lu request\n", tcp_ss9006_clients[i].prefix, (unsigned long int)tcp_ss9006_sim_generic_request->sim);
-															// set flag for reseting SIM
-															simcards[tcp_ss9006_sim_generic_request->sim].flags.reset = 1;
-															simcards[tcp_ss9006_sim_generic_request->sim].flags.reseting = 1;
-														}
-													} else if (simcards[tcp_ss9006_sim_generic_request->sim].client < 0) {
-														// free
-														LOG("%s: Reset SIM #%03lu failed - SIM was not binded\n", tcp_ss9006_clients[i].prefix, (unsigned long int)tcp_ss9006_sim_generic_request->sim);
-													} else {
-														// another
-														LOG("%s: Reset SIM #%03lu failed - SIM was binded with another client\n", tcp_ss9006_clients[i].prefix, (unsigned long int)tcp_ss9006_sim_generic_request->sim);
+												// check for SIM binding
+												if (simcards[tcp_ss9006_sim_generic_request->sim].client == i) {
+													// this
+													if (!simcards[tcp_ss9006_sim_generic_request->sim].flags.reseting) {
+														LOG("%s: Reset SIM #%03lu request\n", tcp_ss9006_clients[i].prefix, (unsigned long int)tcp_ss9006_sim_generic_request->sim);
+														// set flag for reseting SIM
+														simcards[tcp_ss9006_sim_generic_request->sim].flags.reset = 1;
+														simcards[tcp_ss9006_sim_generic_request->sim].flags.reseting = 1;
 													}
+												} else if (simcards[tcp_ss9006_sim_generic_request->sim].client < 0) {
+													// free
+													LOG("%s: Reset SIM #%03lu failed - SIM was not binded\n", tcp_ss9006_clients[i].prefix, (unsigned long int)tcp_ss9006_sim_generic_request->sim);
 												} else {
-													// blocked
-													LOG("%s: Reset SIM #%03lu failed - SIM was blocked\n", tcp_ss9006_clients[i].prefix, (unsigned long int)tcp_ss9006_sim_generic_request->sim);
+													// another
+													LOG("%s: Reset SIM #%03lu failed - SIM was binded with another client\n", tcp_ss9006_clients[i].prefix, (unsigned long int)tcp_ss9006_sim_generic_request->sim);
 												}
 											} else {
 												// not inserted
