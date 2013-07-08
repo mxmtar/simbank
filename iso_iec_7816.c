@@ -415,6 +415,7 @@ int iso_iec_7816_device_command_read_byte(struct iso_iec_7816_device *device, u_
 					device->command.__next = CMD_BYTE_DATA_BURST;
 				}
 			} else if ((byte ^ 0xff) == device->command.header.ins) {
+				device->command.__expected++;
 				device->command.__next = CMD_BYTE_DATA_SINGLE;
 			} else {
 				return -1;
@@ -588,6 +589,75 @@ void iso_iec_7816_device_apply_data_rate(struct iso_iec_7816_device *device, u_i
 }
 //------------------------------------------------------------------------------
 // end of iso_iec_7816_device_apply_data_rate()
+//------------------------------------------------------------------------------
+
+//------------------------------------------------------------------------------
+// get_iso_iec_7816_cla0x_ins_type()
+//------------------------------------------------------------------------------
+int get_iso_iec_7816_cla0x_ins_type(u_int8_t ins)
+{
+	switch (ins) {
+		// read
+		case SIM_IIC_INS_GET_CHALLENGE:
+		case SIM_IIC_INS_READ_BINARY:
+		case SIM_IIC_INS_READ_RECORDS:
+		case SIM_IIC_INS_GET_RESPONSE:
+		case SIM_IIC_INS_GET_DATA:
+			return -1;
+		// write
+		case SIM_IIC_INS_DEACTIVATE_FILE:
+		case SIM_IIC_INS_ERASE_RECORDS:
+		case SIM_IIC_INS_ERASE_BINARY:
+		case SIM_IIC_INS_ERASE_BINARY_1:
+		case SIM_IIC_INS_PERFORM_SCQL_OPERATION:
+		case SIM_IIC_INS_PERFORM_TRANSACTION_OPERATION:
+		case SIM_IIC_INS_PERFORM_USER_OPERATION:
+		case SIM_IIC_INS_VERIFY:
+		case SIM_IIC_INS_VERIFY_1:
+		case SIM_IIC_INS_MANAGE_SECURITY_ENVIRONMENT:
+		case SIM_IIC_INS_CHANGE_REFERENCE_DATA:
+		case SIM_IIC_INS_DISABLE_VERIFICATION_REQUIREMENT:
+		case SIM_IIC_INS_ENABLE_VERIFICATION_REQUIREMENT:
+		case SIM_IIC_INS_PERFORM_SECURITY_OPERATION:
+		case SIM_IIC_INS_RESET_RETRY_COUNTER:
+		case SIM_IIC_INS_ACTIVATE_FILE:
+		case SIM_IIC_INS_GENERATE_ASYMMETRIC_KEY_PAIR:
+		case SIM_IIC_INS_MANAGE_CHANNEL:
+		case SIM_IIC_INS_EXTERNAL_MUTUAL_AUTHENTICATE:
+		case SIM_IIC_INS_GENERAL_AUTHENTICATE:
+		case SIM_IIC_INS_GENERAL_AUTHENTICATE_1:
+		case SIM_IIC_INS_INTERNAL_AUTHENTICATE:
+		case SIM_IIC_INS_SEARCH_BINARY:
+		case SIM_IIC_INS_SEARCH_BINARY_1:
+		case SIM_IIC_INS_SEARCH_RECORD:
+		case SIM_IIC_INS_SELECT:
+		case SIM_IIC_INS_READ_BINARY_1:
+		case SIM_IIC_INS_READ_RECORDS_1:
+		case SIM_IIC_INS_ENVELOPE:
+		case SIM_IIC_INS_ENVELOPE_1:
+		case SIM_IIC_INS_GET_DATA_1:
+		case SIM_IIC_INS_WRITE_BINARY:
+		case SIM_IIC_INS_WRITE_BINARY_1:
+		case SIM_IIC_INS_WRITE_RECORD:
+		case SIM_IIC_INS_UPDATE_BINARY:
+		case SIM_IIC_INS_UPDATE_BINARY_1:
+		case SIM_IIC_INS_PUT_DATA:
+		case SIM_IIC_INS_PUT_DATA_1:
+		case SIM_IIC_INS_UPDATE_RECORD:
+		case SIM_IIC_INS_UPDATE_RECORD_1:
+		case SIM_IIC_INS_CREATE_FILE:
+		case SIM_IIC_INS_APPEND_RECORD:
+		case SIM_IIC_INS_DELETE_FILE:
+		case SIM_IIC_INS_TERMINATE_DF:
+		case SIM_IIC_INS_TERMINATE_EF:
+		case SIM_IIC_INS_TERMINATE_CARD_USAGE:
+			return 1;
+		default:
+			return 0;
+	}
+}
+//------------------------------------------------------------------------------
+// end of get_iso_iec_7816_cla0x_ins_type()
 //------------------------------------------------------------------------------
 
 /******************************************************************************/

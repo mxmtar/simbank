@@ -7,6 +7,63 @@
 
 #include <sys/types.h>
 
+#define SIM_IIC_CLA 0x00
+
+enum {
+	SIM_IIC_INS_DEACTIVATE_FILE						= 0x04,	// to SIM
+	SIM_IIC_INS_ERASE_RECORDS						= 0x0C,	// to SIM (no data)
+	SIM_IIC_INS_ERASE_BINARY						= 0x0E,	// to SIM
+	SIM_IIC_INS_ERASE_BINARY_1						= 0x0F,	// to SIM
+	SIM_IIC_INS_PERFORM_SCQL_OPERATION				= 0x10,	// to SIM (maybe)
+	SIM_IIC_INS_PERFORM_TRANSACTION_OPERATION		= 0x12,	// to SIM (maybe)
+	SIM_IIC_INS_PERFORM_USER_OPERATION				= 0x14,	// to SIM (maybe)
+	SIM_IIC_INS_VERIFY								= 0x20,	// to SIM
+	SIM_IIC_INS_VERIFY_1							= 0x21,	// to SIM
+	SIM_IIC_INS_MANAGE_SECURITY_ENVIRONMENT			= 0x22,	// to SIM
+	SIM_IIC_INS_CHANGE_REFERENCE_DATA				= 0x24,	// to SIM
+	SIM_IIC_INS_DISABLE_VERIFICATION_REQUIREMENT	= 0x26,	// to SIM
+	SIM_IIC_INS_ENABLE_VERIFICATION_REQUIREMENT		= 0x28,	// to SIM
+	SIM_IIC_INS_PERFORM_SECURITY_OPERATION			= 0x2A,	// to SIM
+	SIM_IIC_INS_RESET_RETRY_COUNTER					= 0x2C,	// to SIM
+	SIM_IIC_INS_ACTIVATE_FILE						= 0x44,	// to SIM
+	SIM_IIC_INS_GENERATE_ASYMMETRIC_KEY_PAIR		= 0x46,	// to SIM
+	SIM_IIC_INS_MANAGE_CHANNEL						= 0x70,	// to SIM (no data)
+	SIM_IIC_INS_EXTERNAL_MUTUAL_AUTHENTICATE		= 0x82,	// to SIM
+	SIM_IIC_INS_GET_CHALLENGE						= 0x84,	// from SIM
+	SIM_IIC_INS_GENERAL_AUTHENTICATE				= 0x86,	// to SIM
+	SIM_IIC_INS_GENERAL_AUTHENTICATE_1				= 0x87,	// to SIM
+	SIM_IIC_INS_INTERNAL_AUTHENTICATE				= 0x88,	// to SIM
+	SIM_IIC_INS_SEARCH_BINARY						= 0xA0,	// to SIM
+	SIM_IIC_INS_SEARCH_BINARY_1						= 0xA1,	// to SIM
+	SIM_IIC_INS_SEARCH_RECORD						= 0xA2,	// to SIM
+	SIM_IIC_INS_SELECT								= 0xA4,	// to SIM
+	SIM_IIC_INS_READ_BINARY							= 0xB0,	// from SIM
+	SIM_IIC_INS_READ_BINARY_1						= 0xB1,	// to SIM
+	SIM_IIC_INS_READ_RECORDS						= 0xB2,	// from SIM
+	SIM_IIC_INS_READ_RECORDS_1						= 0xB3,	// to SIM
+	SIM_IIC_INS_GET_RESPONSE						= 0xC0,	// from SIM
+	SIM_IIC_INS_ENVELOPE							= 0xC2,	// to SIM
+	SIM_IIC_INS_ENVELOPE_1							= 0xC3,	// to SIM
+	SIM_IIC_INS_GET_DATA							= 0xCA,	// from SIM
+	SIM_IIC_INS_GET_DATA_1							= 0xCB,	// to SIM
+	SIM_IIC_INS_WRITE_BINARY						= 0xD0,	// to SIM
+	SIM_IIC_INS_WRITE_BINARY_1						= 0xD1,	// to SIM
+	SIM_IIC_INS_WRITE_RECORD						= 0xD2,	// to SIM
+	SIM_IIC_INS_UPDATE_BINARY						= 0xD6,	// to SIM
+	SIM_IIC_INS_UPDATE_BINARY_1						= 0xD7,	// to SIM
+	SIM_IIC_INS_PUT_DATA							= 0xDA,	// to SIM
+	SIM_IIC_INS_PUT_DATA_1							= 0xDB,	// to SIM
+	SIM_IIC_INS_UPDATE_RECORD						= 0xDC,	// to SIM
+	SIM_IIC_INS_UPDATE_RECORD_1						= 0xDD,	// to SIM
+	SIM_IIC_INS_CREATE_FILE							= 0xE0,	// to SIM
+	SIM_IIC_INS_APPEND_RECORD						= 0xE2,	// to SIM
+	SIM_IIC_INS_DELETE_FILE							= 0xE4,	// to SIM
+	SIM_IIC_INS_TERMINATE_DF						= 0xE6,	// to SIM
+	SIM_IIC_INS_TERMINATE_EF						= 0xE8,	// to SIM
+	SIM_IIC_INS_TERMINATE_CARD_USAGE				= 0xFE,	// to SIM (no data)
+};
+
+
 #define ATR_MAXLEN 33
 #define PPS_MAXLEN 6
 #define CMD_MAXLEN 256
@@ -42,6 +99,11 @@ enum {
 	CMD_SERVICE = (1 << 0),
 	CMD_WRITE = (1 << 1),
 	CMD_SENT = (1 << 2),
+};
+
+enum {
+	MACRO_GENERIC_STATE_DONE = -1,
+	MACRO_GENERIC_STATE_INIT = 0,
 };
 
 struct iso_iec_7816_device {
@@ -110,6 +172,18 @@ struct iso_iec_7816_device {
 		size_t __count;
 
 	} command;
+
+	int macro_state;
+
+	char iccid[24];
+	size_t iccid_len;
+
+	char spn[48];
+	size_t spn_len;
+
+	char msisdn[20];
+	size_t msisdn_len;
+
 };
 
 extern int iso_iec_7816_device_atr_is_complete(struct iso_iec_7816_device *device);
@@ -130,6 +204,8 @@ extern void iso_iec_7816_device_command_build(struct iso_iec_7816_device *device
 
 extern void iso_iec_7816_device_reset(struct iso_iec_7816_device *device, u_int32_t frequency);
 extern void iso_iec_7816_device_apply_data_rate(struct iso_iec_7816_device *device, u_int8_t T, u_int8_t TA1);
+
+extern int get_iso_iec_7816_cla0x_ins_type(u_int8_t ins);
 
 #endif //__ISO_IEC_7816_H__
 
