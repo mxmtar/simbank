@@ -18,6 +18,7 @@ enum {
 	SIMCARD_CONTAINER_TYPE_RESET = 1,
 	SIMCARD_CONTAINER_TYPE_SPEED = 2,
 	SIMCARD_CONTAINER_TYPE_MONITOR = 3,
+	SIMCARD_CONTAINER_TYPE_LED = 4,
 };
 
 struct simcard_data {
@@ -30,6 +31,7 @@ struct simcard_data {
 		u_int32_t reset;
 		u_int32_t speed;
 		u_int32_t monitor;
+		u_int32_t led;
 	} __attribute__((packed)) container;
 } __attribute__((packed));
 

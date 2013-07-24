@@ -4,7 +4,7 @@
 AC_PREREQ([2.60])
 
 # set project attribute
-AC_INIT([sbg4], [0.1])
+AC_INIT([simbank], [0.2])
 
 # init automake
 AM_INIT_AUTOMAKE([-Wall -Werror])
@@ -24,10 +24,10 @@ AC_CANONICAL_HOST
 
 AC_CONFIG_MACRO_DIR([m4])
 
-AC_CONFIG_SRCDIR([sbg4.c])
+AC_CONFIG_SRCDIR([simbank.c])
 
 AC_COPYRIGHT("Polygator")
-AC_REVISION(0.1)
+AC_REVISION(0.2)
 
 # prepare autoconfig header data
 AC_CONFIG_HEADER([autoconfig.h])

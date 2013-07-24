@@ -1,13 +1,13 @@
 
 ACLOCAL_AMFLAGS = -I m4 --install
 
-bin_PROGRAMS = sbg4
+bin_PROGRAMS = simbank
 
-sbg4_CFLAGS = $(AM_CFLAGS) -Wall
-sbg4_LDFLAGS = $(AM_LDFLAGS) -lrt
+simbank_CFLAGS = $(AM_CFLAGS) -Wall
+simbank_LDFLAGS = $(AM_LDFLAGS) -lrt
 
-sbg4_SOURCES = \
-		sbg4.c \
+simbank_SOURCES = \
+		simbank.c \
 		iso_iec_7816.c \
 		3gpp_ts_11_11.c \
 		3gpp_ts_23_038.c \
