@@ -1,0 +1,60 @@
+#!/bin/sh
+#
+# simbank control script
+
+# configuration for starting/stopping simbank
+SIMBANK_PID=/var/run/simbank.pid
+SIMBANK_BIN=/usr/bin/simbank
+if [ -f /etc/ssconn.conf ] ; then
+	SIMBANK_ARG=`cat /etc/simbank.conf`
+else
+	SIMBANK_ARG="-l general"
+fi
+
+case $1 in
+
+	start)
+		echo
+		printf "Starting simbank: "
+		if [ -r $SIMBANK_PID ] ; then
+			echo "file $SIMBANK_PID exists! -- may simbank already running!"
+			exit 1
+		else
+			if [ ! -x "$SIMBANK_BIN" ] ; then
+				echo "file $SIMBANK_BIN not found!"
+				exit 1
+			fi
+			$SIMBANK_BIN $SIMBANK_ARG
+			sleep 1
+			if [ ! -s $SIMBANK_PID ] ; then
+				echo "PID file $SIMBANK_PID does not exist -- simbank start failed"
+				exit 1
+			fi
+			echo "started with pid(`cat $SIMBANK_PID`)"
+		fi
+		exit 0
+	;;
+
+	stop)
+		printf "Stopping simbank: "
+		if [ -r $SIMBANK_PID ] ; then
+			kill `cat $SIMBANK_PID`
+			echo "stopped"
+		else
+			echo "No PID file found! simbank probably not running"
+			exit 1
+		fi
+		exit 0
+	;;
+
+	restart)
+		$0 stop
+		if [ "$?" -ne 0 ] ; then
+			exit 1
+		fi
+		sleep 2
+		$0 start
+		exit 0
+	;;
+
+esac

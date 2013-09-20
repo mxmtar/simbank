@@ -1,0 +1,80 @@
+#!/bin/sh
+# Startup script for simbank
+#
+# chkconfig: 2345 95 20
+# description: Polygator SIM bank service programm.
+
+SIMBANK_PID=/var/run/simbank.pid
+SIMBANK_BIN=/usr/bin/simbank
+if [ -f /etc/simbank.conf ] ; then
+	SIMBANK_ARG=`cat /etc/simbank.conf`
+else
+	SIMBANK_ARG="-l general"
+fi
+
+# Source function library.
+. /etc/rc.d/init.d/functions
+
+[ -f $SIMBANK_BIN ] || exit 0
+
+start() {
+	echo -n  "Starting simbank: "
+	if [ -f $SIMBANK_PID ] ; then
+	    failure "simbank alredy running"
+	    echo
+	    RETVAL=1
+	else
+		$SIMBANK_BIN $SIMBANK_ARG
+		RETVAL=$?
+		if test $RETVAL == 0; then
+		touch /var/lock/subsys/simbank
+			success "simbank started"
+			echo
+		else
+			failure "simbank failed"
+			echo
+		fi
+	fi
+    return $RETVAL
+}
+
+stop() {
+	echo -n "Shutting down simbank: "
+	if [ -f $SIMBANK_PID ] ; then
+		kill `cat $SIMBANK_PID`
+		success "simbank shutdown"
+		echo
+		rm -f /var/lock/subsys/simbank
+	else
+		failure "simbank not running"
+		echo
+	fi
+    return 0
+}
+
+case "$1" in
+	start)
+	    start
+	    ;;
+	stop)
+	    stop
+	    ;;
+	status)
+	    status simbank
+	    ;;
+	restart)
+	    stop
+	    start
+	    ;;
+	condrestart)
+	    if test "x`pidof simbank`" != x; then
+			stop
+			start
+	    fi
+	    ;;
+	*)
+	    echo "Usage: simbank {start|stop|restart|condrestart|status}"
+	    exit 1
+esac
+
+exit 0

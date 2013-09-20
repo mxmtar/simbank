@@ -228,11 +228,13 @@ char *log_file = NULL;
 char *pid_file = "/var/run/simbank.pid";
 
 char *prefix = "SB";
-static char options[] = "c:d:fhl:m:p:s:u:v";
+static char options[] = "ac:d:efhl:m:p:s:u:v";
 static char usage[] = "Usage: simbank [options]\n"
 "Options:\n"
+"\t-a - exit on error\n"
 "\t-c <count> - client count (default:4)\n"
 "\t-d <unit> [<set>] - dump data \"sim\",\"client\"\n"
+"\t-e - erase dump & log file(s)\n"
 "\t-f - foreground mode\n"
 "\t-h - print this message\n"
 "\t-l <unit> [<set>] - log \"general\",\"sim\",\"client\"\n"
@@ -293,14 +295,38 @@ void tcp_ss9006_cli_msg_ext_add_param_string(struct tcp_ss9006_client *cli, u_in
 	cli->xmit_length += length;
 }
 
+void simcard_restart(struct simcard *simcard, u_int32_t timeout)
+{
+	// set SIM-card state to disable
+	simcard->state = SIMBANK_SIMCARD_STATE_DISABLE;
+	// start enable timer
+	x_timer_set_ms(simcard->timers.enable, timeout);
+	// stop rest timers
+	x_timer_stop(simcard->timers.reset);
+	x_timer_stop(simcard->timers.atr);
+	x_timer_stop(simcard->timers.wait_time);
+	x_timer_stop(simcard->timers.command);
+	x_timer_stop(simcard->timers.status);
+}
+
 void main_exit(int signal)
 {
 	LOG("%s: catch signal \"%d\"\n", prefix, signal);
-	run = 0;
+	switch (signal) {
+		case SIGSEGV:
+			exit(EXIT_FAILURE);
+			break;
+		default:
+			run = 0;
+			break;
+	}
 }
 
 int main(int argc, char **argv)
 {
+	int abort = 0;
+	int erase_dump = 0;
+
 	int port = 0;
 	char *user = NULL;
 	char *password = NULL;
@@ -353,6 +379,9 @@ int main(int argc, char **argv)
 	// get options
 	while ((opt = getopt(argc, argv, options)) != -1) {
 		switch (opt) {
+			case 'a':
+				abort = 1;
+				break;
 			case 'c':
 				ss9006_client_count = atoi(optarg);
 				break;
@@ -368,6 +397,9 @@ int main(int argc, char **argv)
 						dump_client = "all";
 					}
 				}
+				break;
+			case 'e':
+				erase_dump = 1;
 				break;
 			case 'f':
 				daemonize = 0;
@@ -433,6 +465,9 @@ int main(int argc, char **argv)
 		if ((!mkdir(log_dir, S_IRWXU | S_IRWXG | S_IROTH | S_IXOTH) || (errno == EEXIST))) {
 			snprintf(path, sizeof(path), "%s/general.log", log_dir);
 			log_file = strdup(path);
+			if (erase_dump) {
+				unlink(path);
+			}
 		}
 	}
 	// check for daemonize
@@ -474,9 +509,18 @@ int main(int argc, char **argv)
 			LOG("%s: can't create pid file \"%s\": %s\n", prefix, pid_file, strerror(errno));
 			goto main_end;
 		}
-		freopen("/dev/null", "r", stdin);
-		freopen("/dev/null", "w", stdout);
-		freopen("/dev/null", "w", stderr);
+		if (!freopen("/dev/null", "r", stdin)) {
+			LOG("%s: can't reopen \"%s\" file: %s\n", prefix, "stdin", strerror(errno));
+			goto main_end;
+		}
+		if (!freopen("/dev/null", "w", stdout)) {
+			LOG("%s: can't reopen \"%s\" file: %s\n", prefix, "stdout", strerror(errno));
+			goto main_end;
+		}
+		if (!freopen("/dev/null", "w", stderr)) {
+			LOG("%s: can't reopen \"%s\" file: %s\n", prefix, "stderr", strerror(errno));
+			goto main_end;
+		}
 	}
 
 	setbuf(stdout, 0);
@@ -502,6 +546,9 @@ int main(int argc, char **argv)
 			if ((!mkdir(log_dir, S_IRWXU | S_IRWXG | S_IROTH | S_IXOTH) || (errno == EEXIST))) {
 				snprintf(path, sizeof(path), "%s/sim%03lu.dump", log_dir, (unsigned long int)i);
 				simcards[i].dump = strdup(path);
+				if (erase_dump) {
+					unlink(path);
+				}
 			}
 		}
 		// prepare log path
@@ -509,6 +556,9 @@ int main(int argc, char **argv)
 			if ((!mkdir(log_dir, S_IRWXU | S_IRWXG | S_IROTH | S_IXOTH) || (errno == EEXIST))) {
 				snprintf(path, sizeof(path), "%s/sim%03lu.log", log_dir, (unsigned long int)i);
 				simcards[i].log = strdup(path);
+				if (erase_dump) {
+					unlink(path);
+				}
 			}
 		}
 	}
@@ -524,6 +574,9 @@ int main(int argc, char **argv)
 			if ((!mkdir(log_dir, S_IRWXU | S_IRWXG | S_IROTH | S_IXOTH) || (errno == EEXIST))) {
 				snprintf(path, sizeof(path), "%s/cli%03lu.dump", log_dir, (unsigned long int)i);
 				tcp_ss9006_clients[i].dump = strdup(path);
+				if (erase_dump) {
+					unlink(path);
+				}
 			}
 		}
 		// prepare log path
@@ -531,6 +584,9 @@ int main(int argc, char **argv)
 			if ((!mkdir(log_dir, S_IRWXU | S_IRWXG | S_IROTH | S_IXOTH) || (errno == EEXIST))) {
 				snprintf(path, sizeof(path), "%s/cli%03lu.log", log_dir, (unsigned long int)i);
 				tcp_ss9006_clients[i].log = strdup(path);
+				if (erase_dump) {
+					unlink(path);
+				}
 			}
 		}
 	}
@@ -622,6 +678,10 @@ int main(int argc, char **argv)
 			simcards[i].flags.spn_req = 1;
 			simcards[i].flags.msisdn = 0;
 			simcards[i].flags.msisdn_req = 1;
+#if 0
+			// reset client index
+			simcards[i].client = -1;
+#endif
 		}
 	}
 	// main loop
@@ -661,16 +721,18 @@ int main(int argc, char **argv)
 						fprintf(fp, "%s: Reset active\n", simcards[i].prefix);
 						fclose(fp);
 					}
-#if 1
 					// led on
 					sc_write_data.header.type = SIMCARD_CONTAINER_TYPE_LED;
 					sc_write_data.header.length = sizeof(sc_write_data.container.led);
+#if 0
 					sc_write_data.container.led = 1;
+#else
+					sc_write_data.container.led = 0;
+#endif
 					if (write(simcards[i].fd, &sc_write_data, sizeof(sc_write_data.header) + sc_write_data.header.length) < 0) {
 						LOG("%s: write(dev_fd): %s\n", simcards[i].prefix, strerror(errno));
 						goto main_end;
 					}
-#endif
 					// apply reset signal
 					sc_write_data.header.type = SIMCARD_CONTAINER_TYPE_RESET;
 					sc_write_data.header.length = sizeof(sc_write_data.container.reset);
@@ -692,8 +754,7 @@ int main(int argc, char **argv)
 						fprintf(fp, "%s: Reset inactive\n", simcards[i].prefix);
 						fclose(fp);
 					}
-#if 1
-					// led on
+					// led off
 					sc_write_data.header.type = SIMCARD_CONTAINER_TYPE_LED;
 					sc_write_data.header.length = sizeof(sc_write_data.container.led);
 					sc_write_data.container.led = 0;
@@ -701,7 +762,6 @@ int main(int argc, char **argv)
 						LOG("%s: write(dev_fd): %s\n", simcards[i].prefix, strerror(errno));
 						goto main_end;
 					}
-#endif
 					// release reset signal
 					sc_write_data.header.type = SIMCARD_CONTAINER_TYPE_RESET;
 					sc_write_data.header.length = sizeof(sc_write_data.container.reset);
@@ -713,7 +773,11 @@ int main(int argc, char **argv)
 					// start atr timer
 					x_timer_set_ms(simcards[i].timers.atr, 100);
 					// start wait_time timer
+#if 0
 					x_timer_set_ns(simcards[i].timers.wait_time, simcards[i].ifacedev.WT);
+#else
+					x_timer_set_second(simcards[i].timers.wait_time, 50);
+#endif
 				}
 				// atr
 				if (is_x_timer_enable(simcards[i].timers.atr) && is_x_timer_fired(simcards[i].timers.atr)) {
@@ -742,15 +806,12 @@ int main(int argc, char **argv)
 					simcards[i].flags.spn_req = 1;
 					simcards[i].flags.msisdn = 0;
 					simcards[i].flags.msisdn_req = 1;
-					simcards[i].state = SIMBANK_SIMCARD_STATE_DISABLE;
-					// start enable timer
-					x_timer_set_ms(simcards[i].timers.enable, 1000);
-					// stop rest timers
-					x_timer_stop(simcards[i].timers.reset);
-					x_timer_stop(simcards[i].timers.atr);
-					x_timer_stop(simcards[i].timers.wait_time);
-					x_timer_stop(simcards[i].timers.command);
-					x_timer_stop(simcards[i].timers.status);
+#if 0
+					// reset client index
+					simcards[i].client = -1;
+#endif
+					// restart SIM-card after 1000 ms
+					simcard_restart(&simcards[i], 1000);
 				}
 				// wait_time
 				if (is_x_timer_enable(simcards[i].timers.wait_time) && is_x_timer_fired(simcards[i].timers.wait_time)) {
@@ -764,6 +825,9 @@ int main(int argc, char **argv)
 					}
 					if (simcards[i].flags.inserted) {
 						LOG("%s: Wait time timer fired\n", simcards[i].prefix);
+						if (sim_monitor == i) {
+							goto main_end;
+						}
 					}
 					simcards[i].flags.inserted = 0;
 					simcards[i].flags.busy = 0;
@@ -773,15 +837,12 @@ int main(int argc, char **argv)
 					simcards[i].flags.spn_req = 1;
 					simcards[i].flags.msisdn = 0;
 					simcards[i].flags.msisdn_req = 1;
-					simcards[i].state = SIMBANK_SIMCARD_STATE_DISABLE;
-					// start enable timer
-					x_timer_set_ms(simcards[i].timers.enable, 1000);
-					// stop rest timers
-					x_timer_stop(simcards[i].timers.reset);
-					x_timer_stop(simcards[i].timers.atr);
-					x_timer_stop(simcards[i].timers.wait_time);
-					x_timer_stop(simcards[i].timers.command);
-					x_timer_stop(simcards[i].timers.status);
+#if 0
+					// reset client index
+					simcards[i].client = -1;
+#endif
+					// restart SIM-card after 1000 ms
+					simcard_restart(&simcards[i], 1000);
 				}
 				// command
 				if (is_x_timer_enable(simcards[i].timers.command) && is_x_timer_fired(simcards[i].timers.command)) {
@@ -796,15 +857,8 @@ int main(int argc, char **argv)
 					if (simcards[i].flags.inserted) {
 						LOG("%s: Command timer fired\n", simcards[i].prefix);
 					}
-					simcards[i].state = SIMBANK_SIMCARD_STATE_DISABLE;
-					// start enable timer
-					x_timer_set_ms(simcards[i].timers.enable, 1000);
-					// stop rest timers
-					x_timer_stop(simcards[i].timers.reset);
-					x_timer_stop(simcards[i].timers.atr);
-					x_timer_stop(simcards[i].timers.wait_time);
-					x_timer_stop(simcards[i].timers.command);
-					x_timer_stop(simcards[i].timers.status);
+					// restart SIM-card after 1000 ms
+					simcard_restart(&simcards[i], 1000);
 				}
 				// status
 				if (is_x_timer_enable(simcards[i].timers.status) && is_x_timer_fired(simcards[i].timers.status)) {
@@ -825,16 +879,8 @@ int main(int argc, char **argv)
 			// reset
 			if (simcards[i].flags.reset) {
 				simcards[i].flags.reset = 0;
-				// set SIM-card state
-				simcards[i].state = SIMBANK_SIMCARD_STATE_DISABLE;
-				// start enable timer
-				x_timer_set_ms(simcards[i].timers.enable, 0);
-				// stop rest timers
-				x_timer_stop(simcards[i].timers.reset);
-				x_timer_stop(simcards[i].timers.atr);
-				x_timer_stop(simcards[i].timers.wait_time);
-				x_timer_stop(simcards[i].timers.command);
-				x_timer_stop(simcards[i].timers.status);
+				// restart SIM-card now
+				simcard_restart(&simcards[i], 0);
 			}
 			// command
 			// write
@@ -866,7 +912,11 @@ int main(int argc, char **argv)
 					// start command timer
 					x_timer_set_second(simcards[i].timers.command, 60);
 					// start wait_time timer
+#if 0
 					x_timer_set_ns(simcards[i].timers.wait_time, simcards[i].ifacedev.WT);
+#else
+					x_timer_set_second(simcards[i].timers.wait_time, 50);
+#endif
 					// set SIM-card state
 					simcards[i].state = SIMBANK_SIMCARD_STATE_RUN;
 				}
@@ -994,19 +1044,18 @@ int main(int argc, char **argv)
 							if (simcards[i].state == SIMBANK_SIMCARD_STATE_RESET) {
 								if (iso_iec_7816_device_atr_read_byte(&simcards[i].ifacedev, sc_read_data.container.data[j]) < 0) {
 									LOG("%s: iso_iec_7816_device_atr_read_byte(0x%02x) failed\n", simcards[i].prefix, sc_read_data.container.data[j]);
-									// restart SIM-card slot
-									simcards[i].state = SIMBANK_SIMCARD_STATE_DISABLE;
-									// start enable timer
-									x_timer_set_ms(simcards[i].timers.enable, 1000);
-									// stop rest timers
-									x_timer_stop(simcards[i].timers.reset);
-									x_timer_stop(simcards[i].timers.atr);
-									x_timer_stop(simcards[i].timers.wait_time);
-									x_timer_stop(simcards[i].timers.command);
-									x_timer_stop(simcards[i].timers.status);
+									if (abort) {
+										goto main_end;
+									}
+									// restart SIM-card after 1000 ms
+									simcard_restart(&simcards[i], 1000);
 								} else {
 									// restart wait_time timer
+#if 0
 									x_timer_set_ns(simcards[i].timers.wait_time, simcards[i].ifacedev.WT);
+#else
+									x_timer_set_second(simcards[i].timers.wait_time, 50);
+#endif
 									// check for complete
 									if (iso_iec_7816_device_atr_is_complete(&simcards[i].ifacedev)) {
 										// log
@@ -1051,7 +1100,11 @@ int main(int argc, char **argv)
 													// start command timer
 													x_timer_set_second(simcards[i].timers.command, 5);
 													// start wait_time timer
+#if 0
 													x_timer_set_ns(simcards[i].timers.wait_time, simcards[i].ifacedev.WT);
+#else
+													x_timer_set_second(simcards[i].timers.wait_time, 50);
+#endif
 													// set SIM-card state
 													simcards[i].state = SIMBANK_SIMCARD_STATE_PPS;
 												}
@@ -1118,19 +1171,18 @@ int main(int argc, char **argv)
 							} else if (simcards[i].state == SIMBANK_SIMCARD_STATE_PPS) {
 								if (iso_iec_7816_device_pps_read_byte(&simcards[i].ifacedev, sc_read_data.container.data[j]) < 0) {
 									LOG("%s: iso_iec_7816_device_pps_read_byte(0x%02x) failed\n", simcards[i].prefix, sc_read_data.container.data[j]);
-									// restart SIM-card slot
-									simcards[i].state = SIMBANK_SIMCARD_STATE_DISABLE;
-									// start enable timer
-									x_timer_set_ms(simcards[i].timers.enable, 1000);
-									// stop rest timers
-									x_timer_stop(simcards[i].timers.reset);
-									x_timer_stop(simcards[i].timers.atr);
-									x_timer_stop(simcards[i].timers.wait_time);
-									x_timer_stop(simcards[i].timers.command);
-									x_timer_stop(simcards[i].timers.status);
+									if (abort) {
+										goto main_end;
+									}
+									// restart SIM-card after 1000 ms
+									simcard_restart(&simcards[i], 1000);
 								} else {
 									// restart wait_time timer
+#if 0
 									x_timer_set_ns(simcards[i].timers.wait_time, simcards[i].ifacedev.WT);
+#else
+									x_timer_set_second(simcards[i].timers.wait_time, 50);
+#endif
 									// check for complete
 									if (iso_iec_7816_device_pps_is_complete(&simcards[i].ifacedev)) {
 										// log
@@ -1215,19 +1267,18 @@ int main(int argc, char **argv)
 							} else if (simcards[i].state == SIMBANK_SIMCARD_STATE_RUN) {
 								if (iso_iec_7816_device_command_read_byte(&simcards[i].ifacedev, sc_read_data.container.data[j]) < 0) {
 									LOG("%s: iso_iec_7816_device_command_read_byte(0x%02x) failed\n", simcards[i].prefix, sc_read_data.container.data[j]);
-									// restart SIM-card slot
-									simcards[i].state = SIMBANK_SIMCARD_STATE_DISABLE;
-									// start enable timer
-									x_timer_set_ms(simcards[i].timers.enable, 1000);
-									// stop rest timers
-									x_timer_stop(simcards[i].timers.reset);
-									x_timer_stop(simcards[i].timers.atr);
-									x_timer_stop(simcards[i].timers.wait_time);
-									x_timer_stop(simcards[i].timers.command);
-									x_timer_stop(simcards[i].timers.status);
+									if (abort) {
+										goto main_end;
+									}
+									// restart SIM-card after 1000 ms
+									simcard_restart(&simcards[i], 1000);
 								} else {
 									// restart wait_time timer
+#if 0
 									x_timer_set_ns(simcards[i].timers.wait_time, simcards[i].ifacedev.WT);
+#else
+									x_timer_set_second(simcards[i].timers.wait_time, 50);
+#endif
 									// check for complete
 									if (iso_iec_7816_device_command_is_complete(&simcards[i].ifacedev)) {
 										// log
@@ -1252,17 +1303,11 @@ int main(int argc, char **argv)
 												// run get iccid macro
 												if (gsm_sim_cmd_get_iccid_sm(&simcards[i].ifacedev, 0)) {
 													LOG("%s: gsm_sim_cmd_get_iccid_sm() failed\n", simcards[i].prefix);
-													// restart SIM-card slot
-													simcards[i].state = SIMBANK_SIMCARD_STATE_DISABLE;
-													// start enable timer
-													x_timer_set_ms(simcards[i].timers.enable, 1000);
-													// stop rest timers
-													x_timer_stop(simcards[i].timers.reset);
-													x_timer_stop(simcards[i].timers.atr);
-													x_timer_stop(simcards[i].timers.wait_time);
-													x_timer_stop(simcards[i].timers.command);
-													x_timer_stop(simcards[i].timers.status);
-													//
+													if (abort) {
+														goto main_end;
+													} 
+													// restart SIM-card after 1000 ms
+													simcard_restart(&simcards[i], 1000);
 													simcards[i].flags.iccid = 0;
 													simcards[i].flags.busy = 0;
 												} else if (gsm_sim_cmd_is_done(&simcards[i].ifacedev)) {
@@ -1293,17 +1338,11 @@ int main(int argc, char **argv)
 												// run get spn macro
 												if (gsm_sim_cmd_get_spn_sm(&simcards[i].ifacedev, 0)) {
 													LOG("%s: gsm_sim_cmd_get_spn_sm() failed\n", simcards[i].prefix);
-													// restart SIM-card slot
-													simcards[i].state = SIMBANK_SIMCARD_STATE_DISABLE;
-													// start enable timer
-													x_timer_set_ms(simcards[i].timers.enable, 1000);
-													// stop rest timers
-													x_timer_stop(simcards[i].timers.reset);
-													x_timer_stop(simcards[i].timers.atr);
-													x_timer_stop(simcards[i].timers.wait_time);
-													x_timer_stop(simcards[i].timers.command);
-													x_timer_stop(simcards[i].timers.status);
-													//
+													if (abort) {
+														goto main_end;
+													} 
+													// restart SIM-card after 1000 ms
+													simcard_restart(&simcards[i], 1000);
 													simcards[i].flags.spn = 0;
 													simcards[i].flags.busy = 0;
 												} else if (gsm_sim_cmd_is_done(&simcards[i].ifacedev)) {
@@ -1334,17 +1373,11 @@ int main(int argc, char **argv)
 												// run get msisdn macro
 												if (gsm_sim_cmd_get_msisdn_sm(&simcards[i].ifacedev, 0)) {
 													LOG("%s: gsm_sim_cmd_get_msisdn_sm() failed\n", simcards[i].prefix);
-													// restart SIM-card slot
-													simcards[i].state = SIMBANK_SIMCARD_STATE_DISABLE;
-													// start enable timer
-													x_timer_set_ms(simcards[i].timers.enable, 1000);
-													// stop rest timers
-													x_timer_stop(simcards[i].timers.reset);
-													x_timer_stop(simcards[i].timers.atr);
-													x_timer_stop(simcards[i].timers.wait_time);
-													x_timer_stop(simcards[i].timers.command);
-													x_timer_stop(simcards[i].timers.status);
-													//
+													if (abort) {
+														goto main_end;
+													} 
+													// restart SIM-card after 1000 ms
+													simcard_restart(&simcards[i], 1000);
 													simcards[i].flags.msisdn = 0;
 													simcards[i].flags.busy = 0;
 												} else if (gsm_sim_cmd_is_done(&simcards[i].ifacedev)) {
@@ -1451,16 +1484,8 @@ int main(int argc, char **argv)
 									dumphex(fp, &sc_read_data.container.data[j], sc_read_data.header.length - j);
 									fclose(fp);
 								}
-								// restart SIM-card slot
-								simcards[i].state = SIMBANK_SIMCARD_STATE_DISABLE;
-								// start enable timer
-								x_timer_set_ms(simcards[i].timers.enable, 1000);
-								// stop rest timers
-								x_timer_stop(simcards[i].timers.reset);
-								x_timer_stop(simcards[i].timers.atr);
-								x_timer_stop(simcards[i].timers.wait_time);
-								x_timer_stop(simcards[i].timers.command);
-								x_timer_stop(simcards[i].timers.status);
+								// restart SIM-card after 1000 ms
+								simcard_restart(&simcards[i], 1000);
 								break;
 							}
 						}
@@ -1574,7 +1599,7 @@ int main(int argc, char **argv)
 												// prepare failure authorization response
 												tcp_ss9006_authorization_response = (struct ss9006_authorization_response *)&tcp_ss9006_clients[i].xmit_buf[tcp_ss9006_clients[i].xmit_length];
 												tcp_ss9006_authorization_response->hex01 = SS9006_OPC_AUTHORIZATION;
-												tcp_ss9006_authorization_response->status = 2;
+												tcp_ss9006_authorization_response->status = 6;
 												tcp_ss9006_authorization_response->reserved = 1;
 												tcp_ss9006_clients[i].xmit_length += sizeof(struct ss9006_authorization_response);
 												// set close flag
@@ -1586,7 +1611,7 @@ int main(int argc, char **argv)
 											// prepare failure authorization response
 											tcp_ss9006_authorization_response = (struct ss9006_authorization_response *)&tcp_ss9006_clients[i].xmit_buf[tcp_ss9006_clients[i].xmit_length];
 											tcp_ss9006_authorization_response->hex01 = SS9006_OPC_AUTHORIZATION;
-											tcp_ss9006_authorization_response->status = 1;
+											tcp_ss9006_authorization_response->status = 6;
 											tcp_ss9006_authorization_response->reserved = 1;
 											tcp_ss9006_clients[i].xmit_length += sizeof(struct ss9006_authorization_response);
 											// set close flag
@@ -1794,7 +1819,11 @@ int main(int argc, char **argv)
 													// this - led on
 													sc_write_data.header.type = SIMCARD_CONTAINER_TYPE_LED;
 													sc_write_data.header.length = sizeof(sc_write_data.container.led);
+#if 0
 													sc_write_data.container.led = 1;
+#else
+													sc_write_data.container.led = 0;
+#endif
 													if (write(simcards[tcp_ss9006_sim_generic_request->sim].fd, &sc_write_data, sizeof(sc_write_data.header) + sc_write_data.header.length) < 0) {
 														LOG("%s: SIM #%03lu LED On failed - write(dev_fd): %s\n", tcp_ss9006_clients[i].prefix, (unsigned long int)tcp_ss9006_sim_generic_request->sim, strerror(errno));
 													} else {
@@ -1911,29 +1940,29 @@ int main(int argc, char **argv)
 													// clear SIM owner client
 													simcards[tcp_ss9006_sim_generic_request->sim].client = -1;
 													//
-													if (!simcards[tcp_ss9006_sim_generic_request->sim].flags.busy) {
-														if (simcards[tcp_ss9006_sim_generic_request->sim].flags.iccid_req) {
-															// run get iccid macro
-															simcards[tcp_ss9006_sim_generic_request->sim].flags.iccid_req = 0;
-															gsm_sim_cmd_get_iccid_sm(&simcards[tcp_ss9006_sim_generic_request->sim].ifacedev, 1);
-															simcards[tcp_ss9006_sim_generic_request->sim].flags.iccid = 1;
-															simcards[tcp_ss9006_sim_generic_request->sim].flags.busy = 1;
-														} else if (simcards[tcp_ss9006_sim_generic_request->sim].flags.spn_req) {
-															// run get spn macro
-															simcards[tcp_ss9006_sim_generic_request->sim].flags.spn_req = 0;
-															gsm_sim_cmd_get_spn_sm(&simcards[tcp_ss9006_sim_generic_request->sim].ifacedev, 1);
-															simcards[tcp_ss9006_sim_generic_request->sim].flags.spn = 1;
-															simcards[tcp_ss9006_sim_generic_request->sim].flags.busy = 1;
-														} else if (simcards[tcp_ss9006_sim_generic_request->sim].flags.msisdn_req) {
-															// run get msisdn macro
-															simcards[tcp_ss9006_sim_generic_request->sim].flags.msisdn_req = 0;
-															gsm_sim_cmd_get_msisdn_sm(&simcards[tcp_ss9006_sim_generic_request->sim].ifacedev, 1);
-															simcards[tcp_ss9006_sim_generic_request->sim].flags.msisdn = 1;
-															simcards[tcp_ss9006_sim_generic_request->sim].flags.busy = 1;
-														} else {
-															// start status timer
-															x_timer_set_ms(simcards[tcp_ss9006_sim_generic_request->sim].timers.status, 0);
-														}
+													x_timer_stop(simcards[tcp_ss9006_sim_generic_request->sim].timers.wait_time);
+													//
+													if (simcards[tcp_ss9006_sim_generic_request->sim].flags.iccid_req) {
+														// run get iccid macro
+														simcards[tcp_ss9006_sim_generic_request->sim].flags.iccid_req = 0;
+														gsm_sim_cmd_get_iccid_sm(&simcards[tcp_ss9006_sim_generic_request->sim].ifacedev, 1);
+														simcards[tcp_ss9006_sim_generic_request->sim].flags.iccid = 1;
+														simcards[tcp_ss9006_sim_generic_request->sim].flags.busy = 1;
+													} else if (simcards[tcp_ss9006_sim_generic_request->sim].flags.spn_req) {
+														// run get spn macro
+														simcards[tcp_ss9006_sim_generic_request->sim].flags.spn_req = 0;
+														gsm_sim_cmd_get_spn_sm(&simcards[tcp_ss9006_sim_generic_request->sim].ifacedev, 1);
+														simcards[tcp_ss9006_sim_generic_request->sim].flags.spn = 1;
+														simcards[tcp_ss9006_sim_generic_request->sim].flags.busy = 1;
+													} else if (simcards[tcp_ss9006_sim_generic_request->sim].flags.msisdn_req) {
+														// run get msisdn macro
+														simcards[tcp_ss9006_sim_generic_request->sim].flags.msisdn_req = 0;
+														gsm_sim_cmd_get_msisdn_sm(&simcards[tcp_ss9006_sim_generic_request->sim].ifacedev, 1);
+														simcards[tcp_ss9006_sim_generic_request->sim].flags.msisdn = 1;
+														simcards[tcp_ss9006_sim_generic_request->sim].flags.busy = 1;
+													} else {
+														// start status timer
+														x_timer_set_ms(simcards[tcp_ss9006_sim_generic_request->sim].timers.status, 0);
 													}
 													// notify sim state
 													for (k = 0; k < ss9006_client_count; k++) {
@@ -1980,10 +2009,13 @@ int main(int argc, char **argv)
 										if (tcp_ss9006_sim_generic_request->sim < SIMBANK_SIMCARD_MAX) {
 											// check for SIM insertion status
 											if (simcards[tcp_ss9006_sim_generic_request->sim].flags.inserted) {
+#if 0
 												// check for SIM binding
 												if (simcards[tcp_ss9006_sim_generic_request->sim].client == i) {
 													// this
+#endif
 													LOG("%s: Block SIM #%03lu succeeded\n", tcp_ss9006_clients[i].prefix, (unsigned long int)tcp_ss9006_sim_generic_request->sim);
+#if 0
 												} else if (simcards[tcp_ss9006_sim_generic_request->sim].client < 0) {
 													// free
 													LOG("%s: Block SIM #%03lu failed - SIM was not binded\n", tcp_ss9006_clients[i].prefix, (unsigned long int)tcp_ss9006_sim_generic_request->sim);
@@ -1991,6 +2023,7 @@ int main(int argc, char **argv)
 													// another
 													LOG("%s: Block SIM #%03lu failed - SIM was binded with another client\n", tcp_ss9006_clients[i].prefix, (unsigned long int)tcp_ss9006_sim_generic_request->sim);
 												}
+#endif
 											} else {
 												// not inserted
 												LOG("%s: Block SIM #%03lu failed - SIM not inserted\n", tcp_ss9006_clients[i].prefix, (unsigned long int)tcp_ss9006_sim_generic_request->sim);
