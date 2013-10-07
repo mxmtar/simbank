@@ -184,6 +184,10 @@ struct iso_iec_7816_device {
 	char msisdn[20];
 	size_t msisdn_len;
 
+	size_t sms_count;
+	size_t sms_index;
+	size_t sms_length;
+
 };
 
 extern int iso_iec_7816_device_atr_is_complete(struct iso_iec_7816_device *device);

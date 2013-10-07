@@ -1,0 +1,4 @@
+2013-09-20
+	1. Added ability to ajust wait time thriug command line option 'w' with
+range from 0 to 30 seconds.
+	2. Added feature to delete all SMS from SIM. Command line option 'x'.

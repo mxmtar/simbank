@@ -456,6 +456,137 @@ int gsm_sim_cmd_get_msisdn_sm(struct iso_iec_7816_device *device, int init)
 // end of gsm_sim_cmd_get_msisdn_sm()
 //------------------------------------------------------------------------------
 
+//------------------------------------------------------------------------------
+// gsm_sim_cmd_erase_sms_sm()
+//------------------------------------------------------------------------------
+int gsm_sim_cmd_erase_sms_sm(struct iso_iec_7816_device *device, int init)
+{
+	size_t i;
+	u_int8_t cmd_header[5];
+	u_int8_t cmd_data[256];
+	int rc = -1;
+
+	if (init) {
+		device->macro_state = MACRO_ERASE_SMS_STATE_INIT;
+	}
+
+	switch (device->macro_state) {
+		case MACRO_ERASE_SMS_STATE_INIT:
+			cmd_header[0] = SIM_GSM_CLA;
+			cmd_header[1] = SIM_GSM_INS_SELECT;
+			cmd_header[2] = 0x00;
+			cmd_header[3] = 0x00;
+			cmd_header[4] = 0x02;
+			cmd_data[0] = 0x3f;
+			cmd_data[1] = 0x00;
+			iso_iec_7816_device_command_build(device, cmd_header, CMD_WRITE|CMD_SERVICE, cmd_data, 2);
+			device->macro_state = MACRO_ERASE_SMS_STATE_CHECK_SELECT_3F00;
+			rc = 0;
+			break;
+		case MACRO_ERASE_SMS_STATE_CHECK_SELECT_3F00:
+			if (device->command.sw1 == 0x9f) {
+				cmd_header[0] = SIM_GSM_CLA;
+				cmd_header[1] = SIM_GSM_INS_SELECT;
+				cmd_header[2] = 0x00;
+				cmd_header[3] = 0x00;
+				cmd_header[4] = 0x02;
+				cmd_data[0] = 0x7f;
+				cmd_data[1] = 0x10;
+				iso_iec_7816_device_command_build(device, cmd_header, CMD_WRITE|CMD_SERVICE, cmd_data, 2);
+				device->macro_state = MACRO_ERASE_SMS_STATE_CHECK_SELECT_7F10;
+				rc = 0;
+			} else {
+				device->macro_state = MACRO_ERASE_SMS_STATE_DONE;
+			}
+			break;
+		case MACRO_ERASE_SMS_STATE_CHECK_SELECT_7F10:
+			if (device->command.sw1 == 0x9f) {
+				cmd_header[0] = SIM_GSM_CLA;
+				cmd_header[1] = SIM_GSM_INS_SELECT;
+				cmd_header[2] = 0x00;
+				cmd_header[3] = 0x00;
+				cmd_header[4] = 0x02;
+				cmd_data[0] = 0x6f;
+				cmd_data[1] = 0x3c;
+				iso_iec_7816_device_command_build(device, cmd_header, CMD_WRITE|CMD_SERVICE, cmd_data, 2);
+				device->macro_state = MACRO_ERASE_SMS_STATE_CHECK_SELECT_6F3C;
+				rc = 0;
+			} else {
+				device->macro_state = MACRO_ERASE_SMS_STATE_DONE;
+			}
+			break;
+		case MACRO_ERASE_SMS_STATE_CHECK_SELECT_6F3C:
+			if (device->command.sw1 == 0x9f) {
+				cmd_header[0] = SIM_GSM_CLA;
+				cmd_header[1] = SIM_GSM_INS_GET_RESPONSE;
+				cmd_header[2] = 0x00;
+				cmd_header[3] = 0x00;
+				cmd_header[4] = device->command.sw2;
+				iso_iec_7816_device_command_build(device, cmd_header, CMD_SERVICE, NULL, 0);
+				device->macro_state = MACRO_ERASE_SMS_STATE_CHECK_GET_RESPONSE_6F3C;
+				rc = 0;
+			} else {
+				device->macro_state = MACRO_ERASE_SMS_STATE_DONE;
+			}
+			break;
+		case MACRO_ERASE_SMS_STATE_CHECK_GET_RESPONSE_6F3C:
+			if ((device->command.sw1 & 0x90) == 0x90) {
+				device->sms_index = 0;
+				device->sms_count = device->command.data_rd[3];
+				device->sms_count += device->command.data_rd[2] * 256;
+				device->sms_length = device->command.data_rd[14];
+				device->sms_count /= device->sms_length;
+				if (device->sms_index != device->sms_count) {
+					cmd_header[0] = SIM_GSM_CLA;
+					cmd_header[1] = SIM_GSM_INS_UPDATE_RECORD;
+					cmd_header[2] = ++device->sms_index;
+					cmd_header[3] = 0x04;
+					cmd_header[4] = device->sms_length;
+					for (i = 0; i < device->sms_length; i++) {
+						cmd_data[i] = i;
+					}
+					iso_iec_7816_device_command_build(device, cmd_header, CMD_WRITE|CMD_SERVICE, cmd_data, device->sms_length);
+					device->macro_state = MACRO_ERASE_SMS_STATE_CHECK_UPDATE_RECORD_6F3C;
+				} else {
+					device->macro_state = MACRO_ERASE_SMS_STATE_DONE;
+				}
+				rc = 0;
+			} else {
+				device->macro_state = MACRO_ERASE_SMS_STATE_DONE;
+			}
+			break;
+		case MACRO_ERASE_SMS_STATE_CHECK_UPDATE_RECORD_6F3C:
+			if ((device->command.sw1 & 0x90) == 0x90) {
+				if (device->sms_index != device->sms_count) {
+					cmd_header[0] = SIM_GSM_CLA;
+					cmd_header[1] = SIM_GSM_INS_UPDATE_RECORD;
+					cmd_header[2] = ++device->sms_index;
+					cmd_header[3] = 0x04;
+					cmd_header[4] = device->sms_length;
+					for (i = 0; i < device->sms_length; i++) {
+						cmd_data[i] = i;
+					}
+					iso_iec_7816_device_command_build(device, cmd_header, CMD_WRITE|CMD_SERVICE, cmd_data, device->sms_length);
+					device->macro_state = MACRO_ERASE_SMS_STATE_CHECK_UPDATE_RECORD_6F3C;
+				} else {
+					device->macro_state = MACRO_ERASE_SMS_STATE_DONE;
+				}
+				rc = 0;
+			} else {
+				device->macro_state = MACRO_ERASE_SMS_STATE_DONE;
+			}
+			break;
+		default:
+			device->macro_state = MACRO_ERASE_SMS_STATE_DONE;
+			break;
+	}
+
+	return rc;
+}
+//------------------------------------------------------------------------------
+// end of gsm_sim_cmd_erase_sms_sm()
+//------------------------------------------------------------------------------
+
 /******************************************************************************/
 /* end of 3gpp_ts_11_11.c                                                     */
 /******************************************************************************/

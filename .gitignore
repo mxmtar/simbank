@@ -3,6 +3,7 @@ simbank
 *.l[ao]
 *.tar.gz
 *~
+temp
 .deps
 .libs
 autom4te.cache
