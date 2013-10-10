@@ -21,13 +21,15 @@
 #include <time.h>
 #include <unistd.h>
 
-#include "simcard-def.h"
-#include "x_timer.h"
+#include "simbank/simcard-def.h"
+
 #include "iso_iec_7816.h"
 #include "3gpp_ts_11_11.h"
 #include "3gpp_ts_101_221.h"
 
 #include "ss9006.h"
+
+#include "x_timer.h"
 
 #define mmax(_lhs, _rhs) ((_lhs > _rhs) ? _lhs : _rhs)
 #define mmin(_lhs, _rhs) ((_lhs < _rhs) ? _lhs : _rhs)
@@ -741,6 +743,7 @@ int main(int argc, char **argv)
 						fclose(fp);
 					}
 					// led on
+#ifdef SIMBANK_LED
 					sc_write_data.header.type = SIMCARD_CONTAINER_TYPE_LED;
 					sc_write_data.header.length = sizeof(sc_write_data.container.led);
 #if 0
@@ -752,6 +755,7 @@ int main(int argc, char **argv)
 						LOG("%s: write(dev_fd): %s\n", simcards[i].prefix, strerror(errno));
 						goto main_end;
 					}
+#endif
 					// apply reset signal
 					sc_write_data.header.type = SIMCARD_CONTAINER_TYPE_RESET;
 					sc_write_data.header.length = sizeof(sc_write_data.container.reset);
@@ -774,6 +778,7 @@ int main(int argc, char **argv)
 						fclose(fp);
 					}
 					// led off
+#ifdef SIMBANK_LED
 					sc_write_data.header.type = SIMCARD_CONTAINER_TYPE_LED;
 					sc_write_data.header.length = sizeof(sc_write_data.container.led);
 					sc_write_data.container.led = 0;
@@ -781,6 +786,7 @@ int main(int argc, char **argv)
 						LOG("%s: write(dev_fd): %s\n", simcards[i].prefix, strerror(errno));
 						goto main_end;
 					}
+#endif
 					// release reset signal
 					sc_write_data.header.type = SIMCARD_CONTAINER_TYPE_RESET;
 					sc_write_data.header.length = sizeof(sc_write_data.container.reset);
@@ -1029,7 +1035,7 @@ int main(int argc, char **argv)
 		}
 		// prepare select
 		timeout.tv_sec = 0;
-		timeout.tv_usec = 1000;
+		timeout.tv_usec = 100000;
 		maxfd = 0;
 		FD_ZERO(&rfds);
 		for (i = 0; i < SIMBANK_SIMCARD_MAX; i++) {
@@ -1833,10 +1839,15 @@ int main(int argc, char **argv)
 												// check for SIM binding
 												if (simcards[tcp_ss9006_sim_generic_request->sim].client == i) {
 													// this - led off
+#ifdef SIMBANK_LED
 													sc_write_data.header.type = SIMCARD_CONTAINER_TYPE_LED;
 													sc_write_data.header.length = sizeof(sc_write_data.container.led);
 													sc_write_data.container.led = 0;
-													if (write(simcards[tcp_ss9006_sim_generic_request->sim].fd, &sc_write_data, sizeof(sc_write_data.header) + sc_write_data.header.length) < 0) {
+													res = write(simcards[tcp_ss9006_sim_generic_request->sim].fd, &sc_write_data, sizeof(sc_write_data.header) + sc_write_data.header.length);
+#else
+													res = sizeof(sc_write_data.header) + sc_write_data.header.length;
+#endif
+													if (res < 0) {
 														LOG("%s: SIM #%03lu LED Off failed - write(dev_fd): %s\n", tcp_ss9006_clients[i].prefix, (unsigned long int)tcp_ss9006_sim_generic_request->sim, strerror(errno));
 													} else {
 														LOG("%s: SIM #%03lu LED Off\n", tcp_ss9006_clients[i].prefix, (unsigned long int)tcp_ss9006_sim_generic_request->sim);
@@ -1874,6 +1885,7 @@ int main(int argc, char **argv)
 												// check for SIM binding
 												if (simcards[tcp_ss9006_sim_generic_request->sim].client == i) {
 													// this - led on
+#ifdef SIMBANK_LED
 													sc_write_data.header.type = SIMCARD_CONTAINER_TYPE_LED;
 													sc_write_data.header.length = sizeof(sc_write_data.container.led);
 #if 0
@@ -1881,7 +1893,11 @@ int main(int argc, char **argv)
 #else
 													sc_write_data.container.led = 0;
 #endif
-													if (write(simcards[tcp_ss9006_sim_generic_request->sim].fd, &sc_write_data, sizeof(sc_write_data.header) + sc_write_data.header.length) < 0) {
+													res = write(simcards[tcp_ss9006_sim_generic_request->sim].fd, &sc_write_data, sizeof(sc_write_data.header) + sc_write_data.header.length);
+#else
+													res = sizeof(sc_write_data.header) + sc_write_data.header.length;
+#endif
+													if (res < 0) {
 														LOG("%s: SIM #%03lu LED On failed - write(dev_fd): %s\n", tcp_ss9006_clients[i].prefix, (unsigned long int)tcp_ss9006_sim_generic_request->sim, strerror(errno));
 													} else {
 														LOG("%s: SIM #%03lu LED On\n", tcp_ss9006_clients[i].prefix, (unsigned long int)tcp_ss9006_sim_generic_request->sim);

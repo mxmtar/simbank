@@ -2,3 +2,6 @@
 	1. Added ability to ajust wait time thriug command line option 'w' with
 range from 0 to 30 seconds.
 	2. Added feature to delete all SMS from SIM. Command line option 'x'.
+2013-10-10
+	1. Removed LED functionality.
+	2. Change main select timeout to 10000 us.
