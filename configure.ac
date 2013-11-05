@@ -4,7 +4,7 @@
 AC_PREREQ([2.60])
 
 # set project attribute
-AC_INIT([simbank], [0.4])
+AC_INIT([simbank], [0.5])
 
 # init automake
 AM_INIT_AUTOMAKE([-Wall -Werror])
@@ -27,7 +27,7 @@ AC_CONFIG_MACRO_DIR([m4])
 AC_CONFIG_SRCDIR([simbank.c])
 
 AC_COPYRIGHT("Polygator")
-AC_REVISION(0.4)
+AC_REVISION(0.5)
 
 # prepare autoconfig header data
 AC_CONFIG_HEADER([autoconfig.h])
@@ -60,6 +60,7 @@ AC_PROG_CXX
 AC_PROG_GREP
 AC_PROG_INSTALL
 AC_PROG_SED
+AC_PROG_LIBTOOL
 
 m4_ifdef([AM_PROG_CC_C_O], [AM_PROG_CC_C_O])
 
