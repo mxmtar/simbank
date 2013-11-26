@@ -323,6 +323,10 @@ void simcard_restart(struct simcard *simcard, u_int32_t timeout, int erase_sms)
 	simcard->flags.msisdn_req = 1;
 	simcard->flags.erase_sms = 0;
 	simcard->flags.erase_sms_req = erase_sms;
+	// init text fields
+	simcard->ifacedev.iccid_len = 0;
+	simcard->ifacedev.spn_len = 0;
+	simcard->ifacedev.msisdn_len = 0;
 }
 
 void main_exit(int signal)
@@ -380,10 +384,12 @@ int main(int argc, char **argv)
 	u_int16_t tmpu16;
 	int tmp_flags;
 	int tmp_opt;
-
+#if 1
 	u_int8_t select_header[5];
 	u_int8_t select_data[2];
-
+#else
+	u_int8_t status_header[5];
+#endif
 	struct ss9006_base_header *tcp_ss9006_base_header;
 	struct ss9006_authorization_request *tcp_ss9006_authorization_request;
 	struct ss9006_authorization_response *tcp_ss9006_authorization_response;
@@ -872,6 +878,7 @@ int main(int argc, char **argv)
 				if (is_x_timer_enable(simcards[i].timers.status) && is_x_timer_fired(simcards[i].timers.status)) {
 					// stop status timer
 					x_timer_stop(simcards[i].timers.status);
+#if 1
 					// build SELECT command
 					select_header[0] = 0xa0;
 					select_header[1] = 0xa4;
@@ -881,6 +888,15 @@ int main(int argc, char **argv)
 					select_data[0] = 0x3f;
 					select_data[1] = 0x00;
 					iso_iec_7816_device_command_build(&simcards[i].ifacedev, select_header, CMD_WRITE|CMD_SERVICE, select_data, sizeof(select_data));
+#else
+					// build STATUS command
+					status_header[0] = 0xa0;
+					status_header[1] = 0xf2;
+					status_header[2] = 0x00;
+					status_header[3] = 0x00;
+					status_header[4] = 0x0f;
+					iso_iec_7816_device_command_build(&simcards[i].ifacedev, status_header, CMD_SERVICE, NULL, 0);
+#endif
 				}
 			}
 			// flags
@@ -905,6 +921,7 @@ int main(int argc, char **argv)
 					dumphex(fp, sc_write_data.container.data, sc_write_data.header.length);
 					fclose(fp);
 				}
+#if 0
 				// log
 				if ((simcards[i].log) && (fp = fopen(simcards[i].log, "a"))) {
 					dumptime(fp);
@@ -912,6 +929,7 @@ int main(int argc, char **argv)
 					dumphex(fp, sc_write_data.container.data, sc_write_data.header.length);
 					fclose(fp);
 				}
+#endif
 				// write data
 				if (write(simcards[i].fd, &sc_write_data, sizeof(sc_write_data.header) + sc_write_data.header.length) < 0) {
 					LOG("%s: write(dev_fd): %s\n", simcards[i].prefix, strerror(errno));
@@ -1014,7 +1032,7 @@ int main(int argc, char **argv)
 		}
 		// prepare select
 		timeout.tv_sec = 0;
-		timeout.tv_usec = 10000;
+		timeout.tv_usec = 100000;
 		maxfd = 0;
 		FD_ZERO(&rfds);
 		for (i = 0; i < SIMBANK_SIMCARD_MAX; i++) {
@@ -1303,6 +1321,7 @@ int main(int argc, char **argv)
 									}
 									// check for complete
 									if (iso_iec_7816_device_command_is_complete(&simcards[i].ifacedev)) {
+#if 0
 										// log
 										if ((simcards[i].log) && (fp = fopen(simcards[i].log, "a"))) {
 											dumptime(fp);
@@ -1313,6 +1332,7 @@ int main(int argc, char **argv)
 											fprintf(fp, "%s: Command status %02x %02x\n", simcards[i].prefix, simcards[i].ifacedev.command.sw1, simcards[i].ifacedev.command.sw2);
 											fclose(fp);
 										}
+#endif
 										// stop command timer
 										x_timer_stop(simcards[i].timers.command);
 										// stop wait_time timer
@@ -1497,6 +1517,7 @@ int main(int argc, char **argv)
 												dumphex(fp, sc_write_data.container.data, sc_write_data.header.length);
 												fclose(fp);
 											}
+#if 0
 											// log
 											if ((simcards[i].log) && (fp = fopen(simcards[i].log, "a"))) {
 												dumptime(fp);
@@ -1504,6 +1525,7 @@ int main(int argc, char **argv)
 												dumphex(fp, sc_write_data.container.data, sc_write_data.header.length);
 												fclose(fp);
 											}
+#endif
 											// write data
 											if (write(simcards[i].fd, &sc_write_data, sizeof(sc_write_data.header) + sc_write_data.header.length) < 0) {
 												LOG("%s: write(dev_fd): %s\n", simcards[i].prefix, strerror(errno));
@@ -1526,8 +1548,10 @@ int main(int argc, char **argv)
 										goto main_end;
 									}
 								}
+#if 0
 								// restart SIM-card after 1000 ms
 								simcard_restart(&simcards[i], 1000, erase_sms);
+#endif
 								break;
 							}
 						}
