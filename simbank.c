@@ -301,7 +301,7 @@ void tcp_ss9006_cli_msg_ext_add_param_string(struct tcp_ss9006_client *cli, u_in
 	cli->xmit_length += length;
 }
 
-void simcard_restart(struct simcard *simcard, u_int32_t timeout, int erase_sms)
+void simcard_restart(struct simcard *simcard, u_int32_t timeout, int erase_sms, int erase_fields)
 {
 	// set SIM-card state to disable
 	simcard->state = SIMBANK_SIMCARD_STATE_DISABLE;
@@ -324,9 +324,11 @@ void simcard_restart(struct simcard *simcard, u_int32_t timeout, int erase_sms)
 	simcard->flags.erase_sms = 0;
 	simcard->flags.erase_sms_req = erase_sms;
 	// init text fields
-	simcard->ifacedev.iccid_len = 0;
-	simcard->ifacedev.spn_len = 0;
-	simcard->ifacedev.msisdn_len = 0;
+	if (erase_fields) {
+		simcard->ifacedev.iccid_len = 0;
+		simcard->ifacedev.spn_len = 0;
+		simcard->ifacedev.msisdn_len = 0;
+	}
 }
 
 void main_exit(int signal)
@@ -837,7 +839,7 @@ int main(int argc, char **argv)
 						}
 					}
 					// restart SIM-card after 1000 ms
-					simcard_restart(&simcards[i], 1000, erase_sms);
+					simcard_restart(&simcards[i], 1000, erase_sms, 1);
 				}
 				// wait_time
 				if (is_x_timer_enable(simcards[i].timers.wait_time) && is_x_timer_fired(simcards[i].timers.wait_time)) {
@@ -856,7 +858,7 @@ int main(int argc, char **argv)
 						}
 					}
 					// restart SIM-card after 1000 ms
-					simcard_restart(&simcards[i], 1000, erase_sms);
+					simcard_restart(&simcards[i], 1000, erase_sms, 1);
 				}
 				// command
 				if (is_x_timer_enable(simcards[i].timers.command) && is_x_timer_fired(simcards[i].timers.command)) {
@@ -872,7 +874,7 @@ int main(int argc, char **argv)
 						LOG("%s: Command timer fired\n", simcards[i].prefix);
 					}
 					// restart SIM-card after 1000 ms
-					simcard_restart(&simcards[i], 1000, erase_sms);
+					simcard_restart(&simcards[i], 1000, erase_sms, 1);
 				}
 				// status
 				if (is_x_timer_enable(simcards[i].timers.status) && is_x_timer_fired(simcards[i].timers.status)) {
@@ -904,7 +906,7 @@ int main(int argc, char **argv)
 			if (simcards[i].flags.reset) {
 				simcards[i].flags.reset = 0;
 				// restart SIM-card now
-				simcard_restart(&simcards[i], 0, erase_sms);
+				simcard_restart(&simcards[i], 0, erase_sms, 0);
 			}
 			// command
 			// write
@@ -1076,7 +1078,7 @@ int main(int argc, char **argv)
 										}
 									}
 									// restart SIM-card after 1000 ms
-									simcard_restart(&simcards[i], 1000, erase_sms);
+									simcard_restart(&simcards[i], 1000, erase_sms, 1);
 								} else {
 									// restart wait_time timer
 									if (wait_time) {
@@ -1209,7 +1211,7 @@ int main(int argc, char **argv)
 										goto main_end;
 									}
 									// restart SIM-card after 1000 ms
-									simcard_restart(&simcards[i], 1000, erase_sms);
+									simcard_restart(&simcards[i], 1000, erase_sms, 1);
 								} else {
 									// restart wait_time timer
 									if (wait_time) {
@@ -1311,7 +1313,7 @@ int main(int argc, char **argv)
 										goto main_end;
 									}
 									// restart SIM-card after 1000 ms
-									simcard_restart(&simcards[i], 1000, erase_sms);
+									simcard_restart(&simcards[i], 1000, erase_sms, 1);
 								} else {
 									// restart wait_time timer
 									if (wait_time) {
@@ -1349,7 +1351,7 @@ int main(int argc, char **argv)
 														goto main_end;
 													} 
 													// restart SIM-card after 1000 ms
-													simcard_restart(&simcards[i], 1000, erase_sms);
+													simcard_restart(&simcards[i], 1000, erase_sms, 1);
 												} else if (gsm_sim_cmd_is_done(&simcards[i].ifacedev)) {
 													if (simcards[i].ifacedev.iccid_len) {
 														LOG("%s: ICCID=\"%.*s\"\n", simcards[i].prefix, (int)simcards[i].ifacedev.iccid_len, simcards[i].ifacedev.iccid);
@@ -1382,7 +1384,7 @@ int main(int argc, char **argv)
 														goto main_end;
 													} 
 													// restart SIM-card after 1000 ms
-													simcard_restart(&simcards[i], 1000, erase_sms);
+													simcard_restart(&simcards[i], 1000, erase_sms, 1);
 												} else if (gsm_sim_cmd_is_done(&simcards[i].ifacedev)) {
 													if (simcards[i].ifacedev.spn_len) {
 														LOG("%s: SPN=\"%.*s\"\n", simcards[i].prefix, (int)simcards[i].ifacedev.spn_len, simcards[i].ifacedev.spn);
@@ -1415,7 +1417,7 @@ int main(int argc, char **argv)
 														goto main_end;
 													} 
 													// restart SIM-card after 1000 ms
-													simcard_restart(&simcards[i], 1000, erase_sms);
+													simcard_restart(&simcards[i], 1000, erase_sms, 1);
 												} else if (gsm_sim_cmd_is_done(&simcards[i].ifacedev)) {
 													if (simcards[i].ifacedev.msisdn_len) {
 														LOG("%s: MSISDN=\"%.*s\"\n", simcards[i].prefix, (int)simcards[i].ifacedev.msisdn_len, simcards[i].ifacedev.msisdn);
@@ -1448,7 +1450,7 @@ int main(int argc, char **argv)
 														goto main_end;
 													} 
 													// restart SIM-card after 1000 ms
-													simcard_restart(&simcards[i], 1000, erase_sms);
+													simcard_restart(&simcards[i], 1000, erase_sms, 1);
 												} else if (gsm_sim_cmd_is_done(&simcards[i].ifacedev)) {
 													simcards[i].flags.erase_sms = 0;
 													simcards[i].flags.busy = 0;
@@ -1550,7 +1552,7 @@ int main(int argc, char **argv)
 								}
 #if 0
 								// restart SIM-card after 1000 ms
-								simcard_restart(&simcards[i], 1000, erase_sms);
+								simcard_restart(&simcards[i], 1000, erase_sms, 1);
 #endif
 								break;
 							}
