@@ -1,3 +1,5 @@
+2013-12-02
+	1. Reset client binding for removed SIM-cards.
 2013-11-29
 	1. Improved simcard_restart() function (optiolnal fields cleanup).
 2013-11-26
