@@ -826,7 +826,7 @@ int main(int argc, char **argv)
 						goto main_end;
 					}
 					// start atr timer
-					x_timer_set_ms(simcards[i].timers.atr, 100);
+					x_timer_set_ms(simcards[i].timers.atr, 2000);
 					// start wait_time timer
 					if (wait_time) {
 						x_timer_set_second(simcards[i].timers.wait_time, wait_time);

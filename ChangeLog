@@ -1,3 +1,5 @@
+2013-12-11
+	1. Increase ATR wait timer to 2000 ms. (for old slow cards).
 2013-12-02
 	1. Reset client binding for removed SIM-cards.
 2013-11-29
