@@ -730,7 +730,7 @@ int main(int argc, char **argv)
 			simcards[i].flags.msisdn = 0;
 			simcards[i].flags.msisdn_req = 1;
 			simcards[i].flags.erase_sms = 0;
-			if (sim_restart_flags | SIM_RESTART_FLAG_SMS) {
+			if (sim_restart_flags & SIM_RESTART_FLAG_SMS) {
 				simcards[i].flags.erase_sms_req = 1;
 			}
 		}
@@ -827,12 +827,6 @@ int main(int argc, char **argv)
 					}
 					// start atr timer
 					x_timer_set_ms(simcards[i].timers.atr, 2000);
-					// start wait_time timer
-					if (wait_time) {
-						x_timer_set_second(simcards[i].timers.wait_time, wait_time);
-					} else {
-						x_timer_set_ns(simcards[i].timers.wait_time, simcards[i].ifacedev.WT);
-					}
 				}
 				// atr
 				if (is_x_timer_enable(simcards[i].timers.atr) && is_x_timer_fired(simcards[i].timers.atr)) {
