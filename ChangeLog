@@ -1,3 +1,5 @@
+2014-01-10
+	1. Add sanity check MSISDN length. Set maximum length to 20.
 2013-12-23
 	1. After reset wait timer not set. Fix regression due to previous change.
 2013-12-11

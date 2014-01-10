@@ -412,7 +412,8 @@ int gsm_sim_cmd_get_msisdn_sm(struct iso_iec_7816_device *device, int init)
 				if (device->command.data_rd[start] == 0xff) {
 					device->msisdn_len = 0;
 					device->msisdn[0] = '\0';
-				} else {
+					rc = 0;
+				} else if (device->command.data_rd[start] <= 20) {
 					end = start + device->command.data_rd[start] + 1;
 					start++;
 					device->msisdn_len = 0;
@@ -440,8 +441,8 @@ int gsm_sim_cmd_get_msisdn_sm(struct iso_iec_7816_device *device, int init)
 						}
 					}
 					device->msisdn_len = strlen(device->msisdn);
+					rc = 0;
 				}
-				rc = 0;
 			}
 			device->macro_state = MACRO_GET_MSISDN_STATE_DONE;
 			break;
