@@ -178,6 +178,9 @@ struct iso_iec_7816_device {
 	char iccid[24];
 	size_t iccid_len;
 
+	char imsi[16];
+	size_t imsi_len;
+
 	char spn[48];
 	size_t spn_len;
 

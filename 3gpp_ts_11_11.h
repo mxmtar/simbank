@@ -44,6 +44,16 @@ enum {
 };
 
 enum {
+	MACRO_GET_IMSI_STATE_DONE = MACRO_GENERIC_STATE_DONE,
+	MACRO_GET_IMSI_STATE_INIT = MACRO_GENERIC_STATE_INIT,
+	MACRO_GET_IMSI_STATE_CHECK_SELECT_3F00,
+	MACRO_GET_IMSI_STATE_CHECK_SELECT_7F20,
+	MACRO_GET_IMSI_STATE_CHECK_SELECT_6F07,
+	MACRO_GET_IMSI_STATE_CHECK_GET_RESPONSE_6F07,
+	MACRO_GET_IMSI_STATE_CHECK_READ_BINARY_6F07,
+};
+
+enum {
 	MACRO_GET_SPN_STATE_DONE = MACRO_GENERIC_STATE_DONE,
 	MACRO_GET_SPN_STATE_INIT = MACRO_GENERIC_STATE_INIT,
 	MACRO_GET_SPN_STATE_CHECK_SELECT_3F00,
@@ -77,6 +87,7 @@ extern int get_3gpp_ts_11_11_claa0_ins_type(u_int8_t ins);
 
 extern int gsm_sim_cmd_is_done(struct iso_iec_7816_device *device);
 extern int gsm_sim_cmd_get_iccid_sm(struct iso_iec_7816_device *device, int init);
+extern int gsm_sim_cmd_get_imsi_sm(struct iso_iec_7816_device *device, int init);
 extern int gsm_sim_cmd_get_spn_sm(struct iso_iec_7816_device *device, int init);
 extern int gsm_sim_cmd_get_msisdn_sm(struct iso_iec_7816_device *device, int init);
 extern int gsm_sim_cmd_erase_sms_sm(struct iso_iec_7816_device *device, int init);

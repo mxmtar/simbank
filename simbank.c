@@ -164,6 +164,8 @@ struct simcard {
 		u_int32_t reseting:1;
 		u_int32_t iccid:1;
 		u_int32_t iccid_req:1;
+		u_int32_t imsi:1;
+		u_int32_t imsi_req:1;
 		u_int32_t spn:1;
 		u_int32_t spn_req:1;
 		u_int32_t msisdn:1;
@@ -325,6 +327,8 @@ void simcard_restart(struct simcard *simcard, u_int32_t timeout, u_int32_t flags
 		simcard->flags.busy = 0;
 		simcard->flags.iccid = 0;
 		simcard->flags.iccid_req = 1;
+		simcard->flags.imsi = 0;
+		simcard->flags.imsi_req = 1;
 		simcard->flags.spn = 0;
 		simcard->flags.spn_req = 1;
 		simcard->flags.msisdn = 0;
@@ -335,6 +339,7 @@ void simcard_restart(struct simcard *simcard, u_int32_t timeout, u_int32_t flags
 		}
 		// init text fields
 		simcard->ifacedev.iccid_len = 0;
+		simcard->ifacedev.imsi_len = 0;
 		simcard->ifacedev.spn_len = 0;
 		simcard->ifacedev.msisdn_len = 0;
 		// reset client binding
@@ -725,6 +730,8 @@ int main(int argc, char **argv)
 			simcards[i].flags.busy = 0;
 			simcards[i].flags.iccid = 0;
 			simcards[i].flags.iccid_req = 1;
+			simcards[i].flags.imsi = 0;
+			simcards[i].flags.imsi_req = 1;
 			simcards[i].flags.spn = 0;
 			simcards[i].flags.spn_req = 1;
 			simcards[i].flags.msisdn = 0;
@@ -1021,13 +1028,16 @@ int main(int argc, char **argv)
 							if ((tcp_ss9006_clients[k].sock >= 0) && (tcp_ss9006_clients[k].flags.control)) {
 								tcp_ss9006_cli_msg_ext_init(&tcp_ss9006_clients[k], SS9006_EXT_OPC_SIM_INFO, j, 1, 0xff);
 								if (simcards[j].ifacedev.iccid_len) {
-									tcp_ss9006_cli_msg_ext_add_param(&tcp_ss9006_clients[k], 0, simcards[j].ifacedev.iccid_len, simcards[j].ifacedev.iccid);
+									tcp_ss9006_cli_msg_ext_add_param(&tcp_ss9006_clients[k], SS9006_EXT_OPC_SIM_INFO_IE_ICCID, simcards[j].ifacedev.iccid_len, simcards[j].ifacedev.iccid);
 								}
 								if (simcards[j].ifacedev.spn_len) {
-									tcp_ss9006_cli_msg_ext_add_param(&tcp_ss9006_clients[k], 1, simcards[j].ifacedev.spn_len, simcards[j].ifacedev.spn);
+									tcp_ss9006_cli_msg_ext_add_param(&tcp_ss9006_clients[k], SS9006_EXT_OPC_SIM_INFO_IE_SPN, simcards[j].ifacedev.spn_len, simcards[j].ifacedev.spn);
 								}
 								if (simcards[j].ifacedev.msisdn_len) {
-									tcp_ss9006_cli_msg_ext_add_param(&tcp_ss9006_clients[k], 2, simcards[j].ifacedev.msisdn_len, simcards[j].ifacedev.msisdn);
+									tcp_ss9006_cli_msg_ext_add_param(&tcp_ss9006_clients[k], SS9006_EXT_OPC_SIM_INFO_IE_MSISDN, simcards[j].ifacedev.msisdn_len, simcards[j].ifacedev.msisdn);
+								}
+								if (simcards[j].ifacedev.imsi_len) {
+									tcp_ss9006_cli_msg_ext_add_param(&tcp_ss9006_clients[k], SS9006_EXT_OPC_SIM_INFO_IE_IMSI, simcards[j].ifacedev.imsi_len, simcards[j].ifacedev.imsi);
 								}
 							}
 						}
@@ -1170,6 +1180,12 @@ int main(int argc, char **argv)
 															gsm_sim_cmd_get_iccid_sm(&simcards[i].ifacedev, 1);
 															simcards[i].flags.iccid = 1;
 															simcards[i].flags.busy = 1;
+														} else if (simcards[i].flags.imsi_req) {
+															// run get imsi macro
+															simcards[i].flags.imsi_req = 0;
+															gsm_sim_cmd_get_imsi_sm(&simcards[i].ifacedev, 1);
+															simcards[i].flags.imsi = 1;
+															simcards[i].flags.busy = 1;
 														} else if (simcards[i].flags.spn_req) {
 															// run get spn macro
 															simcards[i].flags.spn_req = 0;
@@ -1275,6 +1291,12 @@ int main(int argc, char **argv)
 													gsm_sim_cmd_get_iccid_sm(&simcards[i].ifacedev, 1);
 													simcards[i].flags.iccid = 1;
 													simcards[i].flags.busy = 1;
+												} else if (simcards[i].flags.imsi_req) {
+													// run get imsi macro
+													simcards[i].flags.imsi_req = 0;
+													gsm_sim_cmd_get_imsi_sm(&simcards[i].ifacedev, 1);
+													simcards[i].flags.imsi = 1;
+													simcards[i].flags.busy = 1;
 												} else if (simcards[i].flags.spn_req) {
 													// run get spn macro
 													simcards[i].flags.spn_req = 0;
@@ -1373,19 +1395,59 @@ int main(int argc, char **argv)
 															if ((tcp_ss9006_clients[k].sock >= 0) && (tcp_ss9006_clients[k].flags.control)) {
 																tcp_ss9006_cli_msg_ext_init(&tcp_ss9006_clients[k], SS9006_EXT_OPC_SIM_INFO, i, 1, 0xff);
 																if (simcards[i].ifacedev.iccid_len) {
-																	tcp_ss9006_cli_msg_ext_add_param(&tcp_ss9006_clients[k], 0, simcards[i].ifacedev.iccid_len, simcards[i].ifacedev.iccid);
+																	tcp_ss9006_cli_msg_ext_add_param(&tcp_ss9006_clients[k], SS9006_EXT_OPC_SIM_INFO_IE_ICCID, simcards[i].ifacedev.iccid_len, simcards[i].ifacedev.iccid);
 																}
 																if (simcards[i].ifacedev.spn_len) {
-																	tcp_ss9006_cli_msg_ext_add_param(&tcp_ss9006_clients[k], 1, simcards[i].ifacedev.spn_len, simcards[i].ifacedev.spn);
+																	tcp_ss9006_cli_msg_ext_add_param(&tcp_ss9006_clients[k], SS9006_EXT_OPC_SIM_INFO_IE_SPN, simcards[i].ifacedev.spn_len, simcards[i].ifacedev.spn);
 																}
 																if (simcards[i].ifacedev.msisdn_len) {
-																	tcp_ss9006_cli_msg_ext_add_param(&tcp_ss9006_clients[k], 2, simcards[i].ifacedev.msisdn_len, simcards[i].ifacedev.msisdn);
+																	tcp_ss9006_cli_msg_ext_add_param(&tcp_ss9006_clients[k], SS9006_EXT_OPC_SIM_INFO_IE_MSISDN, simcards[i].ifacedev.msisdn_len, simcards[i].ifacedev.msisdn);
+																}
+																if (simcards[i].ifacedev.imsi_len) {
+																	tcp_ss9006_cli_msg_ext_add_param(&tcp_ss9006_clients[k], SS9006_EXT_OPC_SIM_INFO_IE_IMSI, simcards[i].ifacedev.imsi_len, simcards[i].ifacedev.imsi);
 																}
 															}
 														}
 													}
 													//
 													simcards[i].flags.iccid = 0;
+													simcards[i].flags.busy = 0;
+												}
+											}
+											if (simcards[i].flags.imsi) {
+												// run get iccid macro
+												if (gsm_sim_cmd_get_imsi_sm(&simcards[i].ifacedev, 0)) {
+													LOG("%s: gsm_sim_cmd_get_imsi_sm() failed\n", simcards[i].prefix);
+													if (abort) {
+														goto main_end;
+													} 
+													// restart SIM-card after 1000 ms
+													simcard_restart(&simcards[i], 1000, sim_restart_flags | SIM_RESTART_FLAG_CLI);
+													break;
+												} else if (gsm_sim_cmd_is_done(&simcards[i].ifacedev)) {
+													if (simcards[i].ifacedev.imsi_len) {
+														LOG("%s: IMSI=\"%.*s\"\n", simcards[i].prefix, (int)simcards[i].ifacedev.imsi_len, simcards[i].ifacedev.imsi);
+														// notify sim IMSI
+														for (k = 0; k < ss9006_client_count; k++) {
+															if ((tcp_ss9006_clients[k].sock >= 0) && (tcp_ss9006_clients[k].flags.control)) {
+																tcp_ss9006_cli_msg_ext_init(&tcp_ss9006_clients[k], SS9006_EXT_OPC_SIM_INFO, i, 1, 0xff);
+																if (simcards[i].ifacedev.iccid_len) {
+																	tcp_ss9006_cli_msg_ext_add_param(&tcp_ss9006_clients[k], SS9006_EXT_OPC_SIM_INFO_IE_ICCID, simcards[i].ifacedev.iccid_len, simcards[i].ifacedev.iccid);
+																}
+																if (simcards[i].ifacedev.spn_len) {
+																	tcp_ss9006_cli_msg_ext_add_param(&tcp_ss9006_clients[k], SS9006_EXT_OPC_SIM_INFO_IE_SPN, simcards[i].ifacedev.spn_len, simcards[i].ifacedev.spn);
+																}
+																if (simcards[i].ifacedev.msisdn_len) {
+																	tcp_ss9006_cli_msg_ext_add_param(&tcp_ss9006_clients[k], SS9006_EXT_OPC_SIM_INFO_IE_MSISDN, simcards[i].ifacedev.msisdn_len, simcards[i].ifacedev.msisdn);
+																}
+																if (simcards[i].ifacedev.imsi_len) {
+																	tcp_ss9006_cli_msg_ext_add_param(&tcp_ss9006_clients[k], SS9006_EXT_OPC_SIM_INFO_IE_IMSI, simcards[i].ifacedev.imsi_len, simcards[i].ifacedev.imsi);
+																}
+															}
+														}
+													}
+													//
+													simcards[i].flags.imsi = 0;
 													simcards[i].flags.busy = 0;
 												}
 											}
@@ -1407,13 +1469,16 @@ int main(int argc, char **argv)
 															if ((tcp_ss9006_clients[k].sock >= 0) && (tcp_ss9006_clients[k].flags.control)) {
 																tcp_ss9006_cli_msg_ext_init(&tcp_ss9006_clients[k], SS9006_EXT_OPC_SIM_INFO, i, 1, 0xff);
 																if (simcards[i].ifacedev.iccid_len) {
-																	tcp_ss9006_cli_msg_ext_add_param(&tcp_ss9006_clients[k], 0, simcards[i].ifacedev.iccid_len, simcards[i].ifacedev.iccid);
+																	tcp_ss9006_cli_msg_ext_add_param(&tcp_ss9006_clients[k], SS9006_EXT_OPC_SIM_INFO_IE_ICCID, simcards[i].ifacedev.iccid_len, simcards[i].ifacedev.iccid);
 																}
 																if (simcards[i].ifacedev.spn_len) {
-																	tcp_ss9006_cli_msg_ext_add_param(&tcp_ss9006_clients[k], 1, simcards[i].ifacedev.spn_len, simcards[i].ifacedev.spn);
+																	tcp_ss9006_cli_msg_ext_add_param(&tcp_ss9006_clients[k], SS9006_EXT_OPC_SIM_INFO_IE_SPN, simcards[i].ifacedev.spn_len, simcards[i].ifacedev.spn);
 																}
 																if (simcards[i].ifacedev.msisdn_len) {
-																	tcp_ss9006_cli_msg_ext_add_param(&tcp_ss9006_clients[k], 2, simcards[i].ifacedev.msisdn_len, simcards[i].ifacedev.msisdn);
+																	tcp_ss9006_cli_msg_ext_add_param(&tcp_ss9006_clients[k], SS9006_EXT_OPC_SIM_INFO_IE_MSISDN, simcards[i].ifacedev.msisdn_len, simcards[i].ifacedev.msisdn);
+																}
+																if (simcards[i].ifacedev.imsi_len) {
+																	tcp_ss9006_cli_msg_ext_add_param(&tcp_ss9006_clients[k], SS9006_EXT_OPC_SIM_INFO_IE_IMSI, simcards[i].ifacedev.imsi_len, simcards[i].ifacedev.imsi);
 																}
 															}
 														}
@@ -1441,13 +1506,16 @@ int main(int argc, char **argv)
 															if ((tcp_ss9006_clients[k].sock >= 0) && (tcp_ss9006_clients[k].flags.control)) {
 																tcp_ss9006_cli_msg_ext_init(&tcp_ss9006_clients[k], SS9006_EXT_OPC_SIM_INFO, i, 1, 0xff);
 																if (simcards[i].ifacedev.iccid_len) {
-																	tcp_ss9006_cli_msg_ext_add_param(&tcp_ss9006_clients[k], 0, simcards[i].ifacedev.iccid_len, simcards[i].ifacedev.iccid);
+																	tcp_ss9006_cli_msg_ext_add_param(&tcp_ss9006_clients[k], SS9006_EXT_OPC_SIM_INFO_IE_ICCID, simcards[i].ifacedev.iccid_len, simcards[i].ifacedev.iccid);
 																}
 																if (simcards[i].ifacedev.spn_len) {
-																	tcp_ss9006_cli_msg_ext_add_param(&tcp_ss9006_clients[k], 1, simcards[i].ifacedev.spn_len, simcards[i].ifacedev.spn);
+																	tcp_ss9006_cli_msg_ext_add_param(&tcp_ss9006_clients[k], SS9006_EXT_OPC_SIM_INFO_IE_SPN, simcards[i].ifacedev.spn_len, simcards[i].ifacedev.spn);
 																}
 																if (simcards[i].ifacedev.msisdn_len) {
-																	tcp_ss9006_cli_msg_ext_add_param(&tcp_ss9006_clients[k], 2, simcards[i].ifacedev.msisdn_len, simcards[i].ifacedev.msisdn);
+																	tcp_ss9006_cli_msg_ext_add_param(&tcp_ss9006_clients[k], SS9006_EXT_OPC_SIM_INFO_IE_MSISDN, simcards[i].ifacedev.msisdn_len, simcards[i].ifacedev.msisdn);
+																}
+																if (simcards[i].ifacedev.imsi_len) {
+																	tcp_ss9006_cli_msg_ext_add_param(&tcp_ss9006_clients[k], SS9006_EXT_OPC_SIM_INFO_IE_IMSI, simcards[i].ifacedev.imsi_len, simcards[i].ifacedev.imsi);
 																}
 															}
 														}
@@ -1478,6 +1546,12 @@ int main(int argc, char **argv)
 													simcards[i].flags.iccid_req = 0;
 													gsm_sim_cmd_get_iccid_sm(&simcards[i].ifacedev, 1);
 													simcards[i].flags.iccid = 1;
+													simcards[i].flags.busy = 1;
+												} else if (simcards[i].flags.imsi_req) {
+													// run get imsi macro
+													simcards[i].flags.imsi_req = 0;
+													gsm_sim_cmd_get_imsi_sm(&simcards[i].ifacedev, 1);
+													simcards[i].flags.imsi = 1;
 													simcards[i].flags.busy = 1;
 												} else if (simcards[i].flags.spn_req) {
 													// run get spn macro
@@ -1985,13 +2059,16 @@ int main(int argc, char **argv)
 														if ((tcp_ss9006_clients[k].sock >= 0) && (tcp_ss9006_clients[k].flags.control)) {
 															tcp_ss9006_cli_msg_ext_init(&tcp_ss9006_clients[k], SS9006_EXT_OPC_SIM_INFO, tcp_ss9006_sim_generic_request->sim, 1, i);
 															if (simcards[tcp_ss9006_sim_generic_request->sim].ifacedev.iccid_len) {
-																tcp_ss9006_cli_msg_ext_add_param(&tcp_ss9006_clients[k], 0, simcards[tcp_ss9006_sim_generic_request->sim].ifacedev.iccid_len, simcards[tcp_ss9006_sim_generic_request->sim].ifacedev.iccid);
+																tcp_ss9006_cli_msg_ext_add_param(&tcp_ss9006_clients[k], SS9006_EXT_OPC_SIM_INFO_IE_ICCID, simcards[tcp_ss9006_sim_generic_request->sim].ifacedev.iccid_len, simcards[tcp_ss9006_sim_generic_request->sim].ifacedev.iccid);
 															}
 															if (simcards[tcp_ss9006_sim_generic_request->sim].ifacedev.spn_len) {
-																tcp_ss9006_cli_msg_ext_add_param(&tcp_ss9006_clients[k], 1, simcards[tcp_ss9006_sim_generic_request->sim].ifacedev.spn_len, simcards[tcp_ss9006_sim_generic_request->sim].ifacedev.spn);
+																tcp_ss9006_cli_msg_ext_add_param(&tcp_ss9006_clients[k], SS9006_EXT_OPC_SIM_INFO_IE_SPN, simcards[tcp_ss9006_sim_generic_request->sim].ifacedev.spn_len, simcards[tcp_ss9006_sim_generic_request->sim].ifacedev.spn);
 															}
 															if (simcards[tcp_ss9006_sim_generic_request->sim].ifacedev.msisdn_len) {
-																tcp_ss9006_cli_msg_ext_add_param(&tcp_ss9006_clients[k], 2, simcards[tcp_ss9006_sim_generic_request->sim].ifacedev.msisdn_len, simcards[tcp_ss9006_sim_generic_request->sim].ifacedev.msisdn);
+																tcp_ss9006_cli_msg_ext_add_param(&tcp_ss9006_clients[k], SS9006_EXT_OPC_SIM_INFO_IE_MSISDN, simcards[tcp_ss9006_sim_generic_request->sim].ifacedev.msisdn_len, simcards[tcp_ss9006_sim_generic_request->sim].ifacedev.msisdn);
+															}
+															if (simcards[tcp_ss9006_sim_generic_request->sim].ifacedev.imsi_len) {
+																tcp_ss9006_cli_msg_ext_add_param(&tcp_ss9006_clients[k], SS9006_EXT_OPC_SIM_INFO_IE_IMSI, simcards[tcp_ss9006_sim_generic_request->sim].ifacedev.imsi_len, simcards[tcp_ss9006_sim_generic_request->sim].ifacedev.imsi);
 															}
 														}
 													}
@@ -2040,6 +2117,12 @@ int main(int argc, char **argv)
 														gsm_sim_cmd_get_iccid_sm(&simcards[tcp_ss9006_sim_generic_request->sim].ifacedev, 1);
 														simcards[tcp_ss9006_sim_generic_request->sim].flags.iccid = 1;
 														simcards[tcp_ss9006_sim_generic_request->sim].flags.busy = 1;
+													} else if (simcards[tcp_ss9006_sim_generic_request->sim].flags.imsi_req) {
+														// run get imsi macro
+														simcards[tcp_ss9006_sim_generic_request->sim].flags.imsi_req = 0;
+														gsm_sim_cmd_get_imsi_sm(&simcards[tcp_ss9006_sim_generic_request->sim].ifacedev, 1);
+														simcards[tcp_ss9006_sim_generic_request->sim].flags.imsi = 1;
+														simcards[tcp_ss9006_sim_generic_request->sim].flags.busy = 1;
 													} else if (simcards[tcp_ss9006_sim_generic_request->sim].flags.spn_req) {
 														// run get spn macro
 														simcards[tcp_ss9006_sim_generic_request->sim].flags.spn_req = 0;
@@ -2067,13 +2150,16 @@ int main(int argc, char **argv)
 														if ((tcp_ss9006_clients[k].sock >= 0) && (tcp_ss9006_clients[k].flags.control)) {
 															tcp_ss9006_cli_msg_ext_init(&tcp_ss9006_clients[k], SS9006_EXT_OPC_SIM_INFO, tcp_ss9006_sim_generic_request->sim, 1, 0xff);
 															if (simcards[tcp_ss9006_sim_generic_request->sim].ifacedev.iccid_len) {
-																tcp_ss9006_cli_msg_ext_add_param(&tcp_ss9006_clients[k], 0, simcards[tcp_ss9006_sim_generic_request->sim].ifacedev.iccid_len, simcards[tcp_ss9006_sim_generic_request->sim].ifacedev.iccid);
+																tcp_ss9006_cli_msg_ext_add_param(&tcp_ss9006_clients[k], SS9006_EXT_OPC_SIM_INFO_IE_ICCID, simcards[tcp_ss9006_sim_generic_request->sim].ifacedev.iccid_len, simcards[tcp_ss9006_sim_generic_request->sim].ifacedev.iccid);
 															}
 															if (simcards[tcp_ss9006_sim_generic_request->sim].ifacedev.spn_len) {
-																tcp_ss9006_cli_msg_ext_add_param(&tcp_ss9006_clients[k], 1, simcards[tcp_ss9006_sim_generic_request->sim].ifacedev.spn_len, simcards[tcp_ss9006_sim_generic_request->sim].ifacedev.spn);
+																tcp_ss9006_cli_msg_ext_add_param(&tcp_ss9006_clients[k], SS9006_EXT_OPC_SIM_INFO_IE_SPN, simcards[tcp_ss9006_sim_generic_request->sim].ifacedev.spn_len, simcards[tcp_ss9006_sim_generic_request->sim].ifacedev.spn);
 															}
 															if (simcards[tcp_ss9006_sim_generic_request->sim].ifacedev.msisdn_len) {
-																tcp_ss9006_cli_msg_ext_add_param(&tcp_ss9006_clients[k], 2, simcards[tcp_ss9006_sim_generic_request->sim].ifacedev.msisdn_len, simcards[tcp_ss9006_sim_generic_request->sim].ifacedev.msisdn);
+																tcp_ss9006_cli_msg_ext_add_param(&tcp_ss9006_clients[k], SS9006_EXT_OPC_SIM_INFO_IE_MSISDN, simcards[tcp_ss9006_sim_generic_request->sim].ifacedev.msisdn_len, simcards[tcp_ss9006_sim_generic_request->sim].ifacedev.msisdn);
+															}
+															if (simcards[tcp_ss9006_sim_generic_request->sim].ifacedev.imsi_len) {
+																tcp_ss9006_cli_msg_ext_add_param(&tcp_ss9006_clients[k], SS9006_EXT_OPC_SIM_INFO_IE_IMSI, simcards[tcp_ss9006_sim_generic_request->sim].ifacedev.imsi_len, simcards[tcp_ss9006_sim_generic_request->sim].ifacedev.imsi);
 															}
 														}
 													}
@@ -2196,13 +2282,16 @@ int main(int argc, char **argv)
 												for (j = 0; j < SIMBANK_SIMCARD_MAX; j++) {
 													tcp_ss9006_cli_msg_ext_init(&tcp_ss9006_clients[i], SS9006_EXT_OPC_SIM_INFO, j, simcards[j].flags.inserted, ((simcards[j].client < 0)?(0xff):(simcards[j].client)));
 													if ((simcards[j].flags.inserted) && (simcards[j].ifacedev.iccid_len)) {
-														tcp_ss9006_cli_msg_ext_add_param(&tcp_ss9006_clients[i], 0, simcards[j].ifacedev.iccid_len, simcards[j].ifacedev.iccid);
+														tcp_ss9006_cli_msg_ext_add_param(&tcp_ss9006_clients[i], SS9006_EXT_OPC_SIM_INFO_IE_ICCID, simcards[j].ifacedev.iccid_len, simcards[j].ifacedev.iccid);
 													}
 													if ((simcards[j].flags.inserted) && (simcards[j].ifacedev.spn_len)) {
-														tcp_ss9006_cli_msg_ext_add_param(&tcp_ss9006_clients[i], 1, simcards[j].ifacedev.spn_len, simcards[j].ifacedev.spn);
+														tcp_ss9006_cli_msg_ext_add_param(&tcp_ss9006_clients[i], SS9006_EXT_OPC_SIM_INFO_IE_SPN, simcards[j].ifacedev.spn_len, simcards[j].ifacedev.spn);
 													}
 													if ((simcards[j].flags.inserted) && (simcards[j].ifacedev.msisdn_len)) {
-														tcp_ss9006_cli_msg_ext_add_param(&tcp_ss9006_clients[i], 2, simcards[j].ifacedev.msisdn_len, simcards[j].ifacedev.msisdn);
+														tcp_ss9006_cli_msg_ext_add_param(&tcp_ss9006_clients[i], SS9006_EXT_OPC_SIM_INFO_IE_MSISDN, simcards[j].ifacedev.msisdn_len, simcards[j].ifacedev.msisdn);
+													}
+													if ((simcards[j].flags.inserted) && (simcards[j].ifacedev.imsi_len)) {
+														tcp_ss9006_cli_msg_ext_add_param(&tcp_ss9006_clients[i], SS9006_EXT_OPC_SIM_INFO_IE_IMSI, simcards[j].ifacedev.imsi_len, simcards[j].ifacedev.imsi);
 													}
 												}
 												break;
@@ -2255,13 +2344,16 @@ int main(int argc, char **argv)
 									if ((tcp_ss9006_clients[k].sock >= 0) && (tcp_ss9006_clients[k].flags.control)) {
 										tcp_ss9006_cli_msg_ext_init(&tcp_ss9006_clients[k], SS9006_EXT_OPC_SIM_INFO, j, 1, 0xff);
 										if (simcards[j].ifacedev.iccid_len) {
-											tcp_ss9006_cli_msg_ext_add_param(&tcp_ss9006_clients[k], 0, simcards[j].ifacedev.iccid_len, simcards[j].ifacedev.iccid);
+											tcp_ss9006_cli_msg_ext_add_param(&tcp_ss9006_clients[k], SS9006_EXT_OPC_SIM_INFO_IE_ICCID, simcards[j].ifacedev.iccid_len, simcards[j].ifacedev.iccid);
 										}
 										if (simcards[j].ifacedev.spn_len) {
-											tcp_ss9006_cli_msg_ext_add_param(&tcp_ss9006_clients[k], 1, simcards[j].ifacedev.spn_len, simcards[j].ifacedev.spn);
+											tcp_ss9006_cli_msg_ext_add_param(&tcp_ss9006_clients[k], SS9006_EXT_OPC_SIM_INFO_IE_SPN, simcards[j].ifacedev.spn_len, simcards[j].ifacedev.spn);
 										}
 										if (simcards[j].ifacedev.msisdn_len) {
-											tcp_ss9006_cli_msg_ext_add_param(&tcp_ss9006_clients[k], 2, simcards[j].ifacedev.msisdn_len, simcards[j].ifacedev.msisdn);
+											tcp_ss9006_cli_msg_ext_add_param(&tcp_ss9006_clients[k], SS9006_EXT_OPC_SIM_INFO_IE_MSISDN, simcards[j].ifacedev.msisdn_len, simcards[j].ifacedev.msisdn);
+										}
+										if (simcards[j].ifacedev.imsi_len) {
+											tcp_ss9006_cli_msg_ext_add_param(&tcp_ss9006_clients[k], SS9006_EXT_OPC_SIM_INFO_IE_IMSI, simcards[j].ifacedev.imsi_len, simcards[j].ifacedev.imsi);
 										}
 									}
 								}

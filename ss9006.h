@@ -34,6 +34,13 @@ enum {
 	SS9006_EXT_OPC_KEEP_ALIVE		= 0x80,
 };
 
+enum {
+	SS9006_EXT_OPC_SIM_INFO_IE_ICCID	= 0x00,
+	SS9006_EXT_OPC_SIM_INFO_IE_SPN		= 0x01,
+	SS9006_EXT_OPC_SIM_INFO_IE_MSISDN	= 0x02,
+	SS9006_EXT_OPC_SIM_INFO_IE_IMSI		= 0x03,
+};
+
 struct ss9006_base_header {
 	u_int8_t opc;
 	u_int8_t data0;

@@ -174,6 +174,130 @@ int gsm_sim_cmd_get_iccid_sm(struct iso_iec_7816_device *device, int init)
 //------------------------------------------------------------------------------
 
 //------------------------------------------------------------------------------
+// gsm_sim_cmd_get_imsi_sm()
+//------------------------------------------------------------------------------
+int gsm_sim_cmd_get_imsi_sm(struct iso_iec_7816_device *device, int init)
+{
+	size_t i, j;
+
+	u_int8_t cmd_header[5];
+	u_int8_t cmd_data[2];
+	int rc = -1;
+
+	if (init) {
+		device->macro_state = MACRO_GET_IMSI_STATE_INIT;
+	}
+
+	switch (device->macro_state) {
+		case MACRO_GET_IMSI_STATE_INIT:
+			cmd_header[0] = SIM_GSM_CLA;
+			cmd_header[1] = SIM_GSM_INS_SELECT;
+			cmd_header[2] = 0x00;
+			cmd_header[3] = 0x00;
+			cmd_header[4] = 0x02;
+			cmd_data[0] = 0x3f;
+			cmd_data[1] = 0x00;
+			iso_iec_7816_device_command_build(device, cmd_header, CMD_WRITE|CMD_SERVICE, cmd_data, 2);
+			device->macro_state = MACRO_GET_IMSI_STATE_CHECK_SELECT_3F00;
+			rc = 0;
+			break;
+		case MACRO_GET_IMSI_STATE_CHECK_SELECT_3F00:
+			if (device->command.sw1 == 0x9f) {
+				cmd_header[0] = SIM_GSM_CLA;
+				cmd_header[1] = SIM_GSM_INS_SELECT;
+				cmd_header[2] = 0x00;
+				cmd_header[3] = 0x00;
+				cmd_header[4] = 0x02;
+				cmd_data[0] = 0x7f;
+				cmd_data[1] = 0x20;
+				iso_iec_7816_device_command_build(device, cmd_header, CMD_WRITE|CMD_SERVICE, cmd_data, 2);
+				device->macro_state = MACRO_GET_IMSI_STATE_CHECK_SELECT_7F20;
+				rc = 0;
+			} else {
+				device->macro_state = MACRO_GET_IMSI_STATE_DONE;
+			}
+			break;
+		case MACRO_GET_IMSI_STATE_CHECK_SELECT_7F20:
+			if (device->command.sw1 == 0x9f) {
+				cmd_header[0] = SIM_GSM_CLA;
+				cmd_header[1] = SIM_GSM_INS_SELECT;
+				cmd_header[2] = 0x00;
+				cmd_header[3] = 0x00;
+				cmd_header[4] = 0x02;
+				cmd_data[0] = 0x6f;
+				cmd_data[1] = 0x07;
+				iso_iec_7816_device_command_build(device, cmd_header, CMD_WRITE|CMD_SERVICE, cmd_data, 2);
+				device->macro_state = MACRO_GET_IMSI_STATE_CHECK_SELECT_6F07;
+				rc = 0;
+			} else {
+				device->macro_state = MACRO_GET_IMSI_STATE_DONE;
+			}
+			break;
+		case MACRO_GET_IMSI_STATE_CHECK_SELECT_6F07:
+			if (device->command.sw1 == 0x9f) {
+				cmd_header[0] = SIM_GSM_CLA;
+				cmd_header[1] = SIM_GSM_INS_GET_RESPONSE;
+				cmd_header[2] = 0x00;
+				cmd_header[3] = 0x00;
+				cmd_header[4] = device->command.sw2;
+				iso_iec_7816_device_command_build(device, cmd_header, CMD_SERVICE, NULL, 0);
+				device->macro_state = MACRO_GET_IMSI_STATE_CHECK_GET_RESPONSE_6F07;
+				rc = 0;
+			} else {
+				device->macro_state = MACRO_GET_IMSI_STATE_DONE;
+			}
+			break;
+		case MACRO_GET_IMSI_STATE_CHECK_GET_RESPONSE_6F07:
+			if ((device->command.sw1 & 0x90) == 0x90) {
+				cmd_header[0] = SIM_GSM_CLA;
+				cmd_header[1] = SIM_GSM_INS_READ_BINARY;
+				cmd_header[2] = 0x00;
+				cmd_header[3] = 0x00;
+				cmd_header[4] = device->command.data_rd[3];
+				iso_iec_7816_device_command_build(device, cmd_header, CMD_SERVICE, NULL, 0);
+				device->macro_state = MACRO_GET_IMSI_STATE_CHECK_READ_BINARY_6F07;
+				rc = 0;
+			} else {
+				device->macro_state = MACRO_GET_IMSI_STATE_DONE;
+			}
+			break;
+		case MACRO_GET_IMSI_STATE_CHECK_READ_BINARY_6F07:
+			if ((device->command.sw1 & 0x90) == 0x90) {
+				j = 0;
+				memset(device->imsi, 0xf, sizeof(device->imsi));
+				device->imsi[j++] = (device->command.data_rd[0] >> 4) & 0xf;
+				for (i = 1; i < 9; i++) {
+					device->imsi[j++] = device->command.data_rd[i] & 0xf;
+					device->imsi[j++] = (device->command.data_rd[i] >> 4) & 0xf;
+				}
+				for (j = 0; j < sizeof(device->imsi); j++) {
+					switch (device->imsi[j]) {
+						case 0: case 1: case 2: case 3:case 4:
+						case 5: case 6: case 7: case 8:case 9:
+							device->imsi[j] += '0';
+							break;
+						default:
+							device->imsi[j] = '\0';
+							break;
+					}
+				}
+				device->imsi_len = strlen(device->imsi);
+				rc = 0;
+			}
+			device->macro_state = MACRO_GET_IMSI_STATE_DONE;
+			break;
+		default:
+			device->macro_state = MACRO_GET_IMSI_STATE_DONE;
+			break;
+	}
+
+	return rc;
+}
+//------------------------------------------------------------------------------
+// end of gsm_sim_cmd_get_imsi_sm()
+//------------------------------------------------------------------------------
+
+//------------------------------------------------------------------------------
 // gsm_sim_cmd_get_spn_sm()
 //------------------------------------------------------------------------------
 int gsm_sim_cmd_get_spn_sm(struct iso_iec_7816_device *device, int init)
@@ -413,7 +537,7 @@ int gsm_sim_cmd_get_msisdn_sm(struct iso_iec_7816_device *device, int init)
 					device->msisdn_len = 0;
 					device->msisdn[0] = '\0';
 					rc = 0;
-				} else if (device->command.data_rd[start] <= 20) {
+				} else if (device->command.data_rd[start] <= 11) {
 					end = start + device->command.data_rd[start] + 1;
 					start++;
 					device->msisdn_len = 0;

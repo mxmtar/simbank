@@ -1,3 +1,6 @@
+2014-01-11
+	1. Add IMSI read procedure.
+	2. MSISDN length limited to 10 + 1 octet.
 2014-01-10
 	1. Add sanity check MSISDN length. Set maximum length to 20.
 2013-12-23
