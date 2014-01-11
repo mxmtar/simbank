@@ -262,11 +262,11 @@ int gsm_sim_cmd_get_imsi_sm(struct iso_iec_7816_device *device, int init)
 			}
 			break;
 		case MACRO_GET_IMSI_STATE_CHECK_READ_BINARY_6F07:
-			if ((device->command.sw1 & 0x90) == 0x90) {
+			if ((device->command.sw1 == 0x90) && (device->command.sw2 == 0x00)) {
 				j = 0;
 				memset(device->imsi, 0xf, sizeof(device->imsi));
-				device->imsi[j++] = (device->command.data_rd[0] >> 4) & 0xf;
-				for (i = 1; i < 9; i++) {
+				device->imsi[j++] = (device->command.data_rd[1] >> 4) & 0xf;
+				for (i = 2; i < 9; i++) {
 					device->imsi[j++] = device->command.data_rd[i] & 0xf;
 					device->imsi[j++] = (device->command.data_rd[i] >> 4) & 0xf;
 				}
@@ -282,6 +282,8 @@ int gsm_sim_cmd_get_imsi_sm(struct iso_iec_7816_device *device, int init)
 					}
 				}
 				device->imsi_len = strlen(device->imsi);
+				rc = 0;
+			} else if (device->command.sw1 == 0x98) {
 				rc = 0;
 			}
 			device->macro_state = MACRO_GET_IMSI_STATE_DONE;
