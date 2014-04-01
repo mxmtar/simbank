@@ -5,7 +5,7 @@
 # configuration for starting/stopping simbank
 SIMBANK_PID=/var/run/simbank.pid
 SIMBANK_BIN=/usr/bin/simbank
-if [ -f /etc/ssconn.conf ] ; then
+if [ -f /etc/simbank.conf ] ; then
 	SIMBANK_ARG=`cat /etc/simbank.conf`
 else
 	SIMBANK_ARG="-l general"

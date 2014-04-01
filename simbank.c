@@ -234,7 +234,7 @@ char *log_file = NULL;
 char *pid_file = "/var/run/simbank.pid";
 
 char *prefix = "SB";
-static char options[] = "ac:d:efhl:m:p:s:u:vw:x";
+static char options[] = "ac:d:efhl:m:p:s:t:u:vw:x";
 static char usage[] = "Usage: simbank [options]\n"
 "Options:\n"
 "\t-a - exit on error\n"
@@ -247,6 +247,7 @@ static char usage[] = "Usage: simbank [options]\n"
 "\t-m <sim> - enable SIM monitor\n"
 "\t-p <port> - server port (default:9006)\n"
 "\t-s <password> - user password (default:password)\n"
+"\t-t <time> - watchdog wait time (default:60, disable:0)\n"
 "\t-u <login> - user login (default:login)\n"
 "\t-v - print version\n"
 "\t-w - SIM response wait time 0-30 seconds (default:0)\n"
@@ -371,6 +372,8 @@ int main(int argc, char **argv)
 	char *password = NULL;
 	size_t ss9006_client_count = 0;
 
+	u_int32_t watchdog_time = 60;
+
 	u_int8_t sim_start = 0xff;
 	u_int8_t sim_end = 0xff;
 
@@ -474,6 +477,11 @@ int main(int argc, char **argv)
 				break;
 			case 's':
 				password = optarg;
+				break;
+			case 't':
+				if (sscanf(optarg, "%u", &watchdog_time) != 1) {
+					watchdog_time = 60;
+				}
 				break;
 			case 'u':
 				user = optarg;
@@ -1566,7 +1574,7 @@ int main(int argc, char **argv)
 													simcards[i].flags.msisdn = 1;
 													simcards[i].flags.busy = 1;
 												} else if (simcards[i].flags.erase_sms_req) {
-													// run get msisdn macro
+													// run erase sms macro
 													simcards[i].flags.erase_sms_req = 0;
 													gsm_sim_cmd_erase_sms_sm(&simcards[i].ifacedev, 1);
 													simcards[i].flags.erase_sms = 1;
@@ -1681,7 +1689,9 @@ int main(int argc, char **argv)
 								// start auth timer
 								x_timer_set_second(tcp_ss9006_clients[i].timers.auth, 5);
 								// start watchdog timer
-								x_timer_set_second(tcp_ss9006_clients[i].timers.watchdog, 30);
+								if (watchdog_time) {
+									x_timer_set_second(tcp_ss9006_clients[i].timers.watchdog, watchdog_time);
+								}
 								// notify client state
 								for (j = 0; j < ss9006_client_count; j++) {
 									if ((tcp_ss9006_clients[j].sock >= 0) && (tcp_ss9006_clients[j].flags.control) && (i != j)) {
@@ -1706,7 +1716,9 @@ int main(int argc, char **argv)
 					res = recv(tcp_ss9006_clients[i].sock, &tcp_ss9006_clients[i].recv_buf[tcp_ss9006_clients[i].recv_length], tcp_ss9006_clients[i].recv_wait - tcp_ss9006_clients[i].recv_length, 0);
 					if (res > 0) {
 						// restart watchdog timer
-						x_timer_set_second(tcp_ss9006_clients[i].timers.watchdog, 30);
+						if (watchdog_time) {
+							x_timer_set_second(tcp_ss9006_clients[i].timers.watchdog, watchdog_time);
+						}
 						// dump
 						if ((tcp_ss9006_clients[i].dump) && (fp = fopen(tcp_ss9006_clients[i].dump, "a"))) {
 							fprintf(fp, "%s: Data received length=%lu\n", tcp_ss9006_clients[i].prefix, (unsigned long int)res);
@@ -2136,7 +2148,7 @@ int main(int argc, char **argv)
 														simcards[tcp_ss9006_sim_generic_request->sim].flags.msisdn = 1;
 														simcards[tcp_ss9006_sim_generic_request->sim].flags.busy = 1;
 													} else if (simcards[tcp_ss9006_sim_generic_request->sim].flags.erase_sms_req) {
-														// run get msisdn macro
+														// run erase sms macro
 														simcards[tcp_ss9006_sim_generic_request->sim].flags.erase_sms_req = 0;
 														gsm_sim_cmd_erase_sms_sm(&simcards[tcp_ss9006_sim_generic_request->sim].ifacedev, 1);
 														simcards[tcp_ss9006_sim_generic_request->sim].flags.erase_sms = 1;
