@@ -234,8 +234,9 @@ char *log_file = NULL;
 char *pid_file = "/var/run/simbank.pid";
 
 char *prefix = "SB";
-static char options[] = "ac:d:efhl:m:p:s:t:u:vw:x";
-static char usage[] = "Usage: simbank [options]\n"
+static char options[] = "ac:d:efhl:m:p:s:t:u:vw:xyz";
+static char usage[] =
+"Usage: simbank [options]\n"
 "Options:\n"
 "\t-a - exit on error\n"
 "\t-c <count> - client count (default:4)\n"
@@ -251,7 +252,10 @@ static char usage[] = "Usage: simbank [options]\n"
 "\t-u <login> - user login (default:login)\n"
 "\t-v - print version\n"
 "\t-w - SIM response wait time 0-30 seconds (default:0)\n"
-"\t-x - erase all SMS\n";
+"\t-x - erase all SMS\n"
+"\t-y - force SIM default clock rate\n"
+"\t-z - disable LED\n"
+;
 
 #define LOG(_fmt, _args...) \
 do { \
@@ -379,6 +383,9 @@ int main(int argc, char **argv)
 
 	u_int32_t sim_restart_flags = 0;
 
+	int default_clock_rate = 0;
+	int use_led = -1;
+
 	int opt;
 
 	char *dump_sim = NULL;
@@ -497,6 +504,12 @@ int main(int argc, char **argv)
 				break;
 			case 'x':
 				sim_restart_flags |= SIM_RESTART_FLAG_SMS;
+				break;
+			case 'y':
+				default_clock_rate = -1;
+				break;
+			case 'z':
+				use_led = 0;
 				break;
 			default:
 				printf("%s", usage);
@@ -788,19 +801,13 @@ int main(int argc, char **argv)
 						fclose(fp);
 					}
 					// led on
-#ifdef SIMBANK_LED
 					sc_write_data.header.type = SIMCARD_CONTAINER_TYPE_LED;
 					sc_write_data.header.length = sizeof(sc_write_data.container.led);
-#if 0
-					sc_write_data.container.led = 1;
-#else
-					sc_write_data.container.led = 0;
-#endif
+					sc_write_data.container.led = use_led;
 					if (write(simcards[i].fd, &sc_write_data, sizeof(sc_write_data.header) + sc_write_data.header.length) < 0) {
 						LOG("%s: write(dev_fd): %s\n", simcards[i].prefix, strerror(errno));
 						goto main_end;
 					}
-#endif
 					// apply reset signal
 					sc_write_data.header.type = SIMCARD_CONTAINER_TYPE_RESET;
 					sc_write_data.header.length = sizeof(sc_write_data.container.reset);
@@ -823,7 +830,6 @@ int main(int argc, char **argv)
 						fclose(fp);
 					}
 					// led off
-#ifdef SIMBANK_LED
 					sc_write_data.header.type = SIMCARD_CONTAINER_TYPE_LED;
 					sc_write_data.header.length = sizeof(sc_write_data.container.led);
 					sc_write_data.container.led = 0;
@@ -831,7 +837,6 @@ int main(int argc, char **argv)
 						LOG("%s: write(dev_fd): %s\n", simcards[i].prefix, strerror(errno));
 						goto main_end;
 					}
-#endif
 					// release reset signal
 					sc_write_data.header.type = SIMCARD_CONTAINER_TYPE_RESET;
 					sc_write_data.header.length = sizeof(sc_write_data.container.reset);
@@ -1116,6 +1121,22 @@ int main(int argc, char **argv)
 									}
 									// check for complete
 									if (iso_iec_7816_device_atr_is_complete(&simcards[i].ifacedev)) {
+										if ((j + 1) != sc_read_data.header.length) {
+											// log
+											if ((simcards[i].log) && (fp = fopen(simcards[i].log, "a"))) {
+												dumptime(fp);
+												fprintf(fp, "%s: read unexpected data length=%lu\n", simcards[i].prefix, (unsigned long int)(sc_read_data.header.length - j));
+												dumphex(fp, &sc_read_data.container.data[j], sc_read_data.header.length - j);
+												fclose(fp);
+											}
+											LOG("%s: read unexpected data length=%lu\n", simcards[i].prefix, (unsigned long int)(sc_read_data.header.length - j));
+											if (abort) {
+												goto main_end;
+											}
+											// restart SIM-card after 1000 ms
+											simcard_restart(&simcards[i], 1000, sim_restart_flags | SIM_RESTART_FLAG_CLI);
+											break;
+										}
 										// log
 										if ((simcards[i].log) && (fp = fopen(simcards[i].log, "a"))) {
 											dumptime(fp);
@@ -1134,39 +1155,41 @@ int main(int argc, char **argv)
 											case 0x94:
 											case 0x95:
 											case 0x96:
-												// write PPS request data
-												sc_write_data.header.type = SIMCARD_CONTAINER_TYPE_DATA;
-												sc_write_data.header.length = iso_iec_7816_device_pps_request_build(&simcards[i].ifacedev, sc_write_data.container.data, 0, iso_iec_7816_device_atr_get_TA1(&simcards[i].ifacedev));
-												// dump
-												if ((simcards[i].dump) && (fp = fopen(simcards[i].dump, "a"))) {
-													dumptime(fp);
-													fprintf(fp, "%s: Data write length=%u\n", simcards[i].prefix, sc_write_data.header.length);
-													dumphex(fp, sc_write_data.container.data, sc_write_data.header.length);
-													fclose(fp);
-												}
-												// log
-												if ((simcards[i].log) && (fp = fopen(simcards[i].log, "a"))) {
-													dumptime(fp);
-													fprintf(fp, "%s: PPS request\n", simcards[i].prefix);
-													dumphex(fp, sc_write_data.container.data, sc_write_data.header.length);
-													fclose(fp);
-												}
-												if (write(simcards[i].fd, &sc_write_data, sizeof(sc_write_data.header) + sc_write_data.header.length) < 0) {
-													LOG("%s, write(dev_fd): %s\n", simcards[i].prefix, strerror(errno));
-													goto main_end;
-												} else {
-													// start command timer
-													x_timer_set_second(simcards[i].timers.command, 5);
-													// start wait_time timer
-													if (wait_time) {
-														x_timer_set_second(simcards[i].timers.wait_time, wait_time);
-													} else {
-														x_timer_set_ns(simcards[i].timers.wait_time, simcards[i].ifacedev.WT);
+												if (!default_clock_rate) {
+													// write PPS request data
+													sc_write_data.header.type = SIMCARD_CONTAINER_TYPE_DATA;
+													sc_write_data.header.length = iso_iec_7816_device_pps_request_build(&simcards[i].ifacedev, sc_write_data.container.data, 0, iso_iec_7816_device_atr_get_TA1(&simcards[i].ifacedev));
+													// dump
+													if ((simcards[i].dump) && (fp = fopen(simcards[i].dump, "a"))) {
+														dumptime(fp);
+														fprintf(fp, "%s: Data write length=%u\n", simcards[i].prefix, sc_write_data.header.length);
+														dumphex(fp, sc_write_data.container.data, sc_write_data.header.length);
+														fclose(fp);
 													}
-													// set SIM-card state
-													simcards[i].state = SIMBANK_SIMCARD_STATE_PPS;
+													// log
+													if ((simcards[i].log) && (fp = fopen(simcards[i].log, "a"))) {
+														dumptime(fp);
+														fprintf(fp, "%s: PPS request\n", simcards[i].prefix);
+														dumphex(fp, sc_write_data.container.data, sc_write_data.header.length);
+														fclose(fp);
+													}
+													if (write(simcards[i].fd, &sc_write_data, sizeof(sc_write_data.header) + sc_write_data.header.length) < 0) {
+														LOG("%s, write(dev_fd): %s\n", simcards[i].prefix, strerror(errno));
+														goto main_end;
+													} else {
+														// start command timer
+														x_timer_set_second(simcards[i].timers.command, 5);
+														// start wait_time timer
+														if (wait_time) {
+															x_timer_set_second(simcards[i].timers.wait_time, wait_time);
+														} else {
+															x_timer_set_ns(simcards[i].timers.wait_time, simcards[i].ifacedev.WT);
+														}
+														// set SIM-card state
+														simcards[i].state = SIMBANK_SIMCARD_STATE_PPS;
+													}
+													break;
 												}
-												break;
 											default:
 												// set SIM-card flag to inserted
 												if (!simcards[i].flags.inserted) {
@@ -1944,14 +1967,10 @@ int main(int argc, char **argv)
 												// check for SIM binding
 												if (simcards[tcp_ss9006_sim_generic_request->sim].client == i) {
 													// this - led off
-#ifdef SIMBANK_LED
 													sc_write_data.header.type = SIMCARD_CONTAINER_TYPE_LED;
 													sc_write_data.header.length = sizeof(sc_write_data.container.led);
 													sc_write_data.container.led = 0;
 													res = write(simcards[tcp_ss9006_sim_generic_request->sim].fd, &sc_write_data, sizeof(sc_write_data.header) + sc_write_data.header.length);
-#else
-													res = sizeof(sc_write_data.header) + sc_write_data.header.length;
-#endif
 													if (res < 0) {
 														LOG("%s: SIM #%03lu LED Off failed - write(dev_fd): %s\n", tcp_ss9006_clients[i].prefix, (unsigned long int)tcp_ss9006_sim_generic_request->sim, strerror(errno));
 													} else {
@@ -1990,18 +2009,10 @@ int main(int argc, char **argv)
 												// check for SIM binding
 												if (simcards[tcp_ss9006_sim_generic_request->sim].client == i) {
 													// this - led on
-#ifdef SIMBANK_LED
 													sc_write_data.header.type = SIMCARD_CONTAINER_TYPE_LED;
 													sc_write_data.header.length = sizeof(sc_write_data.container.led);
-#if 0
-													sc_write_data.container.led = 1;
-#else
-													sc_write_data.container.led = 0;
-#endif
+													sc_write_data.container.led = use_led;
 													res = write(simcards[tcp_ss9006_sim_generic_request->sim].fd, &sc_write_data, sizeof(sc_write_data.header) + sc_write_data.header.length);
-#else
-													res = sizeof(sc_write_data.header) + sc_write_data.header.length;
-#endif
 													if (res < 0) {
 														LOG("%s: SIM #%03lu LED On failed - write(dev_fd): %s\n", tcp_ss9006_clients[i].prefix, (unsigned long int)tcp_ss9006_sim_generic_request->sim, strerror(errno));
 													} else {
@@ -2307,6 +2318,57 @@ int main(int argc, char **argv)
 													}
 												}
 												break;
+											case SS9006_EXT_OPC_SIM_DUMP_ENABLE:
+												if (tcp_ss9006_sim_extension_request->sel < SIMBANK_SIMCARD_MAX) {
+													LOG("%s: Enable dump data for SIM #%03lu\n", tcp_ss9006_clients[i].prefix, (unsigned long int)tcp_ss9006_sim_extension_request->sel);
+													if (!simcards[tcp_ss9006_sim_extension_request->sel].dump) {
+														if ((!mkdir(log_dir, S_IRWXU | S_IRWXG | S_IROTH | S_IXOTH) || (errno == EEXIST))) {
+															snprintf(path, sizeof(path), "%s/sim%03lu.dump", log_dir, (unsigned long int)tcp_ss9006_sim_extension_request->sel);
+															simcards[tcp_ss9006_sim_extension_request->sel].dump = strdup(path);
+															if (erase_dump) {
+																unlink(simcards[tcp_ss9006_sim_extension_request->sel].dump);
+															}
+														}
+													}
+												} else {
+													LOG("%s: Enable dump data for SIM #%03lu failed - SIM index out of range=[0;%u]\n", tcp_ss9006_clients[i].prefix, (unsigned long int)tcp_ss9006_sim_extension_request->sel, SIMBANK_SIMCARD_MAX - 1);
+												}
+												break;
+											case SS9006_EXT_OPC_SIM_DUMP_DISABLE:
+												if (tcp_ss9006_sim_extension_request->sel < SIMBANK_SIMCARD_MAX) {
+													LOG("%s: Disable dump data for SIM #%03lu\n", tcp_ss9006_clients[i].prefix, (unsigned long int)tcp_ss9006_sim_extension_request->sel);
+													if (simcards[tcp_ss9006_sim_extension_request->sel].dump) {
+														free(simcards[tcp_ss9006_sim_extension_request->sel].dump);
+														simcards[tcp_ss9006_sim_extension_request->sel].dump = NULL;
+													}
+												} else {
+													LOG("%s: Disable dump data for SIM #%03lu failed - SIM index out of range=[0;%u]\n", tcp_ss9006_clients[i].prefix, (unsigned long int)tcp_ss9006_sim_extension_request->sel, SIMBANK_SIMCARD_MAX - 1);
+												}
+												break;
+											case SS9006_EXT_OPC_SIM_DUMP_DELETE:
+												if (tcp_ss9006_sim_extension_request->sel < SIMBANK_SIMCARD_MAX) {
+													LOG("%s: Delete dump file for SIM #%03lu\n", tcp_ss9006_clients[i].prefix, (unsigned long int)tcp_ss9006_sim_extension_request->sel);
+													if (simcards[tcp_ss9006_sim_extension_request->sel].dump) {
+														unlink(simcards[tcp_ss9006_sim_extension_request->sel].dump);
+													}
+												} else {
+													LOG("%s: Delete dump file for SIM #%03lu failed - SIM index out of range=[0;%u]\n", tcp_ss9006_clients[i].prefix, (unsigned long int)tcp_ss9006_sim_extension_request->sel, SIMBANK_SIMCARD_MAX - 1);
+												}
+												break;
+											case SS9006_EXT_OPC_SIM_TEST_SELECT:
+												if (tcp_ss9006_sim_extension_request->sel < SIMBANK_SIMCARD_MAX) {
+													LOG("%s: Set test control point for SIM #%03lu\n", tcp_ss9006_clients[i].prefix, (unsigned long int)tcp_ss9006_sim_extension_request->sel);
+													sc_write_data.header.type = SIMCARD_CONTAINER_TYPE_MONITOR;
+													sc_write_data.header.length = sizeof(sc_write_data.container.monitor);
+													sc_write_data.container.monitor = tcp_ss9006_sim_extension_request->sel;
+													if (write(simcards[i].fd, &sc_write_data, sizeof(sc_write_data.header) + sc_write_data.header.length) < 0) {
+														LOG("%s: write(dev_fd): %s\n", simcards[i].prefix, strerror(errno));
+														goto main_end;
+													}
+												} else {
+													LOG("%s: Set test control point for SIM #%03lu failed - SIM index out of range=[0;%u]\n", tcp_ss9006_clients[i].prefix, (unsigned long int)tcp_ss9006_sim_extension_request->sel, SIMBANK_SIMCARD_MAX - 1);
+												}
+												break;
 											case SS9006_EXT_OPC_KEEP_ALIVE:
 												tcp_ss9006_cli_msg_ext_init(&tcp_ss9006_clients[i], SS9006_EXT_OPC_KEEP_ALIVE, 0, 0, 0);
 												break;
@@ -2407,6 +2469,16 @@ main_end:
 	// close server socket
 	close(tcp_ss9006_sock);
 	for (i = 0; i < SIMBANK_SIMCARD_MAX; i++) {
+		// led off
+		sc_write_data.header.type = SIMCARD_CONTAINER_TYPE_LED;
+		sc_write_data.header.length = sizeof(sc_write_data.container.led);
+		sc_write_data.container.led = 0;
+		write(simcards[i].fd, &sc_write_data, sizeof(sc_write_data.header) + sc_write_data.header.length);
+		// release reset signal
+		sc_write_data.header.type = SIMCARD_CONTAINER_TYPE_RESET;
+		sc_write_data.header.length = sizeof(sc_write_data.container.reset);
+		sc_write_data.container.reset = 1;
+		write(simcards[i].fd, &sc_write_data, sizeof(sc_write_data.header) + sc_write_data.header.length);
 		// close device file
 		if (simcards[i].fd > 0) {
 			close(simcards[i].fd);
