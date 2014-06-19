@@ -1,3 +1,6 @@
+2014-06-19
+	1. Fix proper LED operation on binded SIM's.
+	2. Fix cleanup procedure.
 2014-04-30
 	1. Added extension command for dump file management.
 	2. Added LED feature control.

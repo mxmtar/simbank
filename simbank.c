@@ -801,12 +801,14 @@ int main(int argc, char **argv)
 						fclose(fp);
 					}
 					// led on
-					sc_write_data.header.type = SIMCARD_CONTAINER_TYPE_LED;
-					sc_write_data.header.length = sizeof(sc_write_data.container.led);
-					sc_write_data.container.led = use_led;
-					if (write(simcards[i].fd, &sc_write_data, sizeof(sc_write_data.header) + sc_write_data.header.length) < 0) {
-						LOG("%s: write(dev_fd): %s\n", simcards[i].prefix, strerror(errno));
-						goto main_end;
+					if (simcards[i].client == -1) {
+						sc_write_data.header.type = SIMCARD_CONTAINER_TYPE_LED;
+						sc_write_data.header.length = sizeof(sc_write_data.container.led);
+						sc_write_data.container.led = use_led;
+						if (write(simcards[i].fd, &sc_write_data, sizeof(sc_write_data.header) + sc_write_data.header.length) < 0) {
+							LOG("%s: write(dev_fd): %s\n", simcards[i].prefix, strerror(errno));
+							goto main_end;
+						}
 					}
 					// apply reset signal
 					sc_write_data.header.type = SIMCARD_CONTAINER_TYPE_RESET;
@@ -830,12 +832,14 @@ int main(int argc, char **argv)
 						fclose(fp);
 					}
 					// led off
-					sc_write_data.header.type = SIMCARD_CONTAINER_TYPE_LED;
-					sc_write_data.header.length = sizeof(sc_write_data.container.led);
-					sc_write_data.container.led = 0;
-					if (write(simcards[i].fd, &sc_write_data, sizeof(sc_write_data.header) + sc_write_data.header.length) < 0) {
-						LOG("%s: write(dev_fd): %s\n", simcards[i].prefix, strerror(errno));
-						goto main_end;
+					if (simcards[i].client == -1) {
+						sc_write_data.header.type = SIMCARD_CONTAINER_TYPE_LED;
+						sc_write_data.header.length = sizeof(sc_write_data.container.led);
+						sc_write_data.container.led = 0;
+						if (write(simcards[i].fd, &sc_write_data, sizeof(sc_write_data.header) + sc_write_data.header.length) < 0) {
+							LOG("%s: write(dev_fd): %s\n", simcards[i].prefix, strerror(errno));
+							goto main_end;
+						}
 					}
 					// release reset signal
 					sc_write_data.header.type = SIMCARD_CONTAINER_TYPE_RESET;
@@ -2468,28 +2472,29 @@ main_end:
 	}
 	// close server socket
 	close(tcp_ss9006_sock);
+	//
 	for (i = 0; i < SIMBANK_SIMCARD_MAX; i++) {
-		// led off
-		sc_write_data.header.type = SIMCARD_CONTAINER_TYPE_LED;
-		sc_write_data.header.length = sizeof(sc_write_data.container.led);
-		sc_write_data.container.led = 0;
-		write(simcards[i].fd, &sc_write_data, sizeof(sc_write_data.header) + sc_write_data.header.length);
-		// release reset signal
-		sc_write_data.header.type = SIMCARD_CONTAINER_TYPE_RESET;
-		sc_write_data.header.length = sizeof(sc_write_data.container.reset);
-		sc_write_data.container.reset = 1;
-		write(simcards[i].fd, &sc_write_data, sizeof(sc_write_data.header) + sc_write_data.header.length);
-		// close device file
 		if (simcards[i].fd > 0) {
+			// led off
+			sc_write_data.header.type = SIMCARD_CONTAINER_TYPE_LED;
+			sc_write_data.header.length = sizeof(sc_write_data.container.led);
+			sc_write_data.container.led = 0;
+			write(simcards[i].fd, &sc_write_data, sizeof(sc_write_data.header) + sc_write_data.header.length);
+			// release reset signal
+			sc_write_data.header.type = SIMCARD_CONTAINER_TYPE_RESET;
+			sc_write_data.header.length = sizeof(sc_write_data.container.reset);
+			sc_write_data.container.reset = 1;
+			write(simcards[i].fd, &sc_write_data, sizeof(sc_write_data.header) + sc_write_data.header.length);
+			// close device file
 			close(simcards[i].fd);
-		}
-		// free dump path
-		if (simcards[i].dump) {
-			free(simcards[i].dump);
-		}
-		// free log path
-		if (simcards[i].log) {
-			free(simcards[i].log);
+			// free dump path
+			if (simcards[i].dump) {
+				free(simcards[i].dump);
+			}
+			// free log path
+			if (simcards[i].log) {
+				free(simcards[i].log);
+			}
 		}
 	}
 	LOG("%s: exit\n", prefix);
