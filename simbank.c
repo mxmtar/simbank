@@ -1038,6 +1038,11 @@ int main(int argc, char **argv)
 						// unbind SIM from this client
 						simcards[j].client = -1;
 						LOG("%s: Unbind SIM #%03lu succeeded\n", tcp_ss9006_clients[i].prefix, (long unsigned int)j);
+						// led off
+						sc_write_data.header.type = SIMCARD_CONTAINER_TYPE_LED;
+						sc_write_data.header.length = sizeof(sc_write_data.container.led);
+						sc_write_data.container.led = 0;
+						write(simcards[j].fd, &sc_write_data, sizeof(sc_write_data.header) + sc_write_data.header.length);
 						// start status timer
 						x_timer_set_ms(simcards[j].timers.status, 0);
 						// notify sim state
@@ -2133,6 +2138,11 @@ int main(int argc, char **argv)
 												if (simcards[tcp_ss9006_sim_generic_request->sim].client == i) {
 													// this
 													LOG("%s: Unbind SIM #%03lu succeeded\n", tcp_ss9006_clients[i].prefix, (unsigned long int)tcp_ss9006_sim_generic_request->sim);
+													// led off
+													sc_write_data.header.type = SIMCARD_CONTAINER_TYPE_LED;
+													sc_write_data.header.length = sizeof(sc_write_data.container.led);
+													sc_write_data.container.led = 0;
+													write(simcards[tcp_ss9006_sim_generic_request->sim].fd, &sc_write_data, sizeof(sc_write_data.header) + sc_write_data.header.length);
 													// clear SIM owner client
 													simcards[tcp_ss9006_sim_generic_request->sim].client = -1;
 													//
@@ -2415,6 +2425,11 @@ int main(int argc, char **argv)
 								// unbind SIM from this client
 								simcards[j].client = -1;
 								LOG("%s: Unbind SIM #%03lu succeeded\n", tcp_ss9006_clients[i].prefix, (long unsigned int)j);
+								// led off
+								sc_write_data.header.type = SIMCARD_CONTAINER_TYPE_LED;
+								sc_write_data.header.length = sizeof(sc_write_data.container.led);
+								sc_write_data.container.led = 0;
+								write(simcards[j].fd, &sc_write_data, sizeof(sc_write_data.header) + sc_write_data.header.length);
 								// start status timer
 								x_timer_set_ms(simcards[j].timers.status, 0);
 								// notify sim state

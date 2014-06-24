@@ -1,3 +1,5 @@
+2014-06-24
+	1. Add LED off disabling on SIM Unbind command.
 2014-06-19
 	1. Fix proper LED operation on binded SIM's.
 	2. Fix cleanup procedure.
