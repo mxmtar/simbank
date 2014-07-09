@@ -156,6 +156,8 @@ struct simcard {
 		struct x_timer wait_time;
 		struct x_timer command;
 		struct x_timer status;
+		struct x_timer led_on;
+		struct x_timer led_off;
 	} timers;
 	struct {
 		u_int32_t busy:1;
@@ -176,6 +178,9 @@ struct simcard {
 	int state;
 	int client;
 	struct iso_iec_7816_device ifacedev;
+	// led
+	u_int32_t led_on_time; // ms
+	u_int32_t led_off_time; // ms
 	// debug
 	char *dump;
 	char *log;
@@ -234,16 +239,18 @@ char *log_file = NULL;
 char *pid_file = "/var/run/simbank.pid";
 
 char *prefix = "SB";
-static char options[] = "ac:d:efhl:m:p:s:t:u:vw:xyz";
+static char options[] = "abc:d:efhkl:m:p:s:t:u:vw:xyz";
 static char usage[] =
 "Usage: simbank [options]\n"
 "Options:\n"
 "\t-a - exit on error\n"
+"\t-b - LED blink\n"
 "\t-c <count> - client count (default:4)\n"
 "\t-d <unit> [<set>] - dump data \"sim\",\"client\"\n"
 "\t-e - erase dump & log file(s)\n"
 "\t-f - foreground mode\n"
 "\t-h - print this message\n"
+"\t-k - status vs select\n"
 "\t-l <unit> [<set>] - log \"general\",\"sim\",\"client\"\n"
 "\t-m <sim> - enable SIM monitor\n"
 "\t-p <port> - server port (default:9006)\n"
@@ -325,6 +332,8 @@ void simcard_restart(struct simcard *simcard, u_int32_t timeout, u_int32_t flags
 	x_timer_stop(simcard->timers.wait_time);
 	x_timer_stop(simcard->timers.command);
 	x_timer_stop(simcard->timers.status);
+	x_timer_stop(simcard->timers.led_on);
+	x_timer_stop(simcard->timers.led_off);
 	// init flags
 	simcard->flags.reset = 0;
 	if (flags & SIM_RESTART_FLAG_CLI) {
@@ -385,6 +394,8 @@ int main(int argc, char **argv)
 
 	int default_clock_rate = 0;
 	int use_led = -1;
+	int use_led_blink = 0;
+	int use_status_vs_select = 0;
 
 	int opt;
 
@@ -413,12 +424,11 @@ int main(int argc, char **argv)
 	u_int16_t tmpu16;
 	int tmp_flags;
 	int tmp_opt;
-#if 1
+
 	u_int8_t select_header[5];
 	u_int8_t select_data[2];
-#else
 	u_int8_t status_header[5];
-#endif
+
 	struct ss9006_base_header *tcp_ss9006_base_header;
 	struct ss9006_authorization_request *tcp_ss9006_authorization_request;
 	struct ss9006_authorization_response *tcp_ss9006_authorization_response;
@@ -434,6 +444,9 @@ int main(int argc, char **argv)
 		switch (opt) {
 			case 'a':
 				abort = 1;
+				break;
+			case 'b':
+				use_led_blink = -1;
 				break;
 			case 'c':
 				ss9006_client_count = atoi(optarg);
@@ -461,6 +474,9 @@ int main(int argc, char **argv)
 			case 'h':
 				printf("%s", usage);
 				exit(EXIT_SUCCESS);
+			case 'k':
+				use_status_vs_select = -1;
+				break;
 			case 'l':
 				if (!strcmp(optarg, "sim")) {
 					log_sim = argv[optind];
@@ -802,12 +818,14 @@ int main(int argc, char **argv)
 					}
 					// led on
 					if (simcards[i].client == -1) {
-						sc_write_data.header.type = SIMCARD_CONTAINER_TYPE_LED;
-						sc_write_data.header.length = sizeof(sc_write_data.container.led);
-						sc_write_data.container.led = use_led;
-						if (write(simcards[i].fd, &sc_write_data, sizeof(sc_write_data.header) + sc_write_data.header.length) < 0) {
-							LOG("%s: write(dev_fd): %s\n", simcards[i].prefix, strerror(errno));
-							goto main_end;
+						if (use_led) {
+							sc_write_data.header.type = SIMCARD_CONTAINER_TYPE_LED;
+							sc_write_data.header.length = sizeof(sc_write_data.container.led);
+							sc_write_data.container.led = 1;
+							if (write(simcards[i].fd, &sc_write_data, sizeof(sc_write_data.header) + sc_write_data.header.length) < 0) {
+								LOG("%s: write(dev_fd): %s\n", simcards[i].prefix, strerror(errno));
+								goto main_end;
+							}
 						}
 					}
 					// apply reset signal
@@ -833,12 +851,14 @@ int main(int argc, char **argv)
 					}
 					// led off
 					if (simcards[i].client == -1) {
-						sc_write_data.header.type = SIMCARD_CONTAINER_TYPE_LED;
-						sc_write_data.header.length = sizeof(sc_write_data.container.led);
-						sc_write_data.container.led = 0;
-						if (write(simcards[i].fd, &sc_write_data, sizeof(sc_write_data.header) + sc_write_data.header.length) < 0) {
-							LOG("%s: write(dev_fd): %s\n", simcards[i].prefix, strerror(errno));
-							goto main_end;
+						if (use_led) {
+							sc_write_data.header.type = SIMCARD_CONTAINER_TYPE_LED;
+							sc_write_data.header.length = sizeof(sc_write_data.container.led);
+							sc_write_data.container.led = 0;
+							if (write(simcards[i].fd, &sc_write_data, sizeof(sc_write_data.header) + sc_write_data.header.length) < 0) {
+								LOG("%s: write(dev_fd): %s\n", simcards[i].prefix, strerror(errno));
+								goto main_end;
+							}
 						}
 					}
 					// release reset signal
@@ -914,25 +934,59 @@ int main(int argc, char **argv)
 				if (is_x_timer_enable(simcards[i].timers.status) && is_x_timer_fired(simcards[i].timers.status)) {
 					// stop status timer
 					x_timer_stop(simcards[i].timers.status);
-#if 1
-					// build SELECT command
-					select_header[0] = 0xa0;
-					select_header[1] = 0xa4;
-					select_header[2] = 0x00;
-					select_header[3] = 0x00;
-					select_header[4] = 0x02;
-					select_data[0] = 0x3f;
-					select_data[1] = 0x00;
-					iso_iec_7816_device_command_build(&simcards[i].ifacedev, select_header, CMD_WRITE|CMD_SERVICE, select_data, sizeof(select_data));
-#else
-					// build STATUS command
-					status_header[0] = 0xa0;
-					status_header[1] = 0xf2;
-					status_header[2] = 0x00;
-					status_header[3] = 0x00;
-					status_header[4] = 0x0f;
-					iso_iec_7816_device_command_build(&simcards[i].ifacedev, status_header, CMD_SERVICE, NULL, 0);
-#endif
+					if (use_status_vs_select) {
+						// build STATUS command
+						status_header[0] = 0xa0;
+						status_header[1] = 0xf2;
+						status_header[2] = 0x00;
+						status_header[3] = 0x00;
+						status_header[4] = 0x0f;
+						iso_iec_7816_device_command_build(&simcards[i].ifacedev, status_header, CMD_SERVICE, NULL, 0);
+					} else {
+						// build SELECT command
+						select_header[0] = 0xa0;
+						select_header[1] = 0xa4;
+						select_header[2] = 0x00;
+						select_header[3] = 0x00;
+						select_header[4] = 0x02;
+						select_data[0] = 0x3f;
+						select_data[1] = 0x00;
+						iso_iec_7816_device_command_build(&simcards[i].ifacedev, select_header, CMD_WRITE | CMD_SERVICE, select_data, sizeof(select_data));
+					}
+				}
+				// led_on
+				if (is_x_timer_enable(simcards[i].timers.led_on) && is_x_timer_fired(simcards[i].timers.led_on)) {
+					// stop led_on timer
+					x_timer_stop(simcards[i].timers.led_on);
+					// led off
+					if (use_led) {
+						sc_write_data.header.type = SIMCARD_CONTAINER_TYPE_LED;
+						sc_write_data.header.length = sizeof(sc_write_data.container.led);
+						sc_write_data.container.led = 0;
+						if (write(simcards[i].fd, &sc_write_data, sizeof(sc_write_data.header) + sc_write_data.header.length) < 0) {
+							LOG("%s: write(dev_fd): %s\n", simcards[i].prefix, strerror(errno));
+							goto main_end;
+						}
+					}
+					// start led_off timer
+					x_timer_set_ms(simcards[i].timers.led_off, simcards[i].led_off_time);
+				}
+				// led_off
+				if (is_x_timer_enable(simcards[i].timers.led_off) && is_x_timer_fired(simcards[i].timers.led_off)) {
+					// stop led_off timer
+					x_timer_stop(simcards[i].timers.led_off);
+					// led on
+					if (use_led) {
+						sc_write_data.header.type = SIMCARD_CONTAINER_TYPE_LED;
+						sc_write_data.header.length = sizeof(sc_write_data.container.led);
+						sc_write_data.container.led = 1;
+						if (write(simcards[i].fd, &sc_write_data, sizeof(sc_write_data.header) + sc_write_data.header.length) < 0) {
+							LOG("%s: write(dev_fd): %s\n", simcards[i].prefix, strerror(errno));
+							goto main_end;
+						}
+					}
+					// start led_on timer
+					x_timer_set_ms(simcards[i].timers.led_on, simcards[i].led_on_time);
 				}
 			}
 			// flags
@@ -1035,14 +1089,18 @@ int main(int argc, char **argv)
 				// traverse SIM binded with this client
 				for (j = 0; j < SIMBANK_SIMCARD_MAX; j++) {
 					if (simcards[j].client == i) {
+						LOG("%s: Unbind SIM #%03lu succeeded\n", tcp_ss9006_clients[i].prefix, (long unsigned int)j);
 						// unbind SIM from this client
 						simcards[j].client = -1;
-						LOG("%s: Unbind SIM #%03lu succeeded\n", tcp_ss9006_clients[i].prefix, (long unsigned int)j);
+						// reset some flags
+						simcards[j].flags.reseting = 0;
 						// led off
-						sc_write_data.header.type = SIMCARD_CONTAINER_TYPE_LED;
-						sc_write_data.header.length = sizeof(sc_write_data.container.led);
-						sc_write_data.container.led = 0;
-						write(simcards[j].fd, &sc_write_data, sizeof(sc_write_data.header) + sc_write_data.header.length);
+						if (use_led) {
+							sc_write_data.header.type = SIMCARD_CONTAINER_TYPE_LED;
+							sc_write_data.header.length = sizeof(sc_write_data.container.led);
+							sc_write_data.container.led = 0;
+							write(simcards[j].fd, &sc_write_data, sizeof(sc_write_data.header) + sc_write_data.header.length);
+						}
 						// start status timer
 						x_timer_set_ms(simcards[j].timers.status, 0);
 						// notify sim state
@@ -1976,14 +2034,17 @@ int main(int argc, char **argv)
 												// check for SIM binding
 												if (simcards[tcp_ss9006_sim_generic_request->sim].client == i) {
 													// this - led off
-													sc_write_data.header.type = SIMCARD_CONTAINER_TYPE_LED;
-													sc_write_data.header.length = sizeof(sc_write_data.container.led);
-													sc_write_data.container.led = 0;
-													res = write(simcards[tcp_ss9006_sim_generic_request->sim].fd, &sc_write_data, sizeof(sc_write_data.header) + sc_write_data.header.length);
-													if (res < 0) {
-														LOG("%s: SIM #%03lu LED Off failed - write(dev_fd): %s\n", tcp_ss9006_clients[i].prefix, (unsigned long int)tcp_ss9006_sim_generic_request->sim, strerror(errno));
-													} else {
-														LOG("%s: SIM #%03lu LED Off\n", tcp_ss9006_clients[i].prefix, (unsigned long int)tcp_ss9006_sim_generic_request->sim);
+													LOG("%s: SIM #%03lu LED Off\n", tcp_ss9006_clients[i].prefix, (unsigned long int)tcp_ss9006_sim_generic_request->sim);
+													// stop led_on timer
+													x_timer_stop(simcards[tcp_ss9006_sim_generic_request->sim].timers.led_on);
+													// stop led_off timer
+													x_timer_stop(simcards[tcp_ss9006_sim_generic_request->sim].timers.led_off);
+													// led on
+													if (use_led) {
+														sc_write_data.header.type = SIMCARD_CONTAINER_TYPE_LED;
+														sc_write_data.header.length = sizeof(sc_write_data.container.led);
+														sc_write_data.container.led = 1;
+														write(simcards[tcp_ss9006_sim_generic_request->sim].fd, &sc_write_data, sizeof(sc_write_data.header) + sc_write_data.header.length);
 													}
 												} else if (simcards[tcp_ss9006_sim_generic_request->sim].client < 0) {
 													// free
@@ -2018,14 +2079,13 @@ int main(int argc, char **argv)
 												// check for SIM binding
 												if (simcards[tcp_ss9006_sim_generic_request->sim].client == i) {
 													// this - led on
-													sc_write_data.header.type = SIMCARD_CONTAINER_TYPE_LED;
-													sc_write_data.header.length = sizeof(sc_write_data.container.led);
-													sc_write_data.container.led = use_led;
-													res = write(simcards[tcp_ss9006_sim_generic_request->sim].fd, &sc_write_data, sizeof(sc_write_data.header) + sc_write_data.header.length);
-													if (res < 0) {
-														LOG("%s: SIM #%03lu LED On failed - write(dev_fd): %s\n", tcp_ss9006_clients[i].prefix, (unsigned long int)tcp_ss9006_sim_generic_request->sim, strerror(errno));
-													} else {
-														LOG("%s: SIM #%03lu LED On\n", tcp_ss9006_clients[i].prefix, (unsigned long int)tcp_ss9006_sim_generic_request->sim);
+													LOG("%s: SIM #%03lu LED On\n", tcp_ss9006_clients[i].prefix, (unsigned long int)tcp_ss9006_sim_generic_request->sim);
+													if (use_led_blink) {
+														// set led on/off timings
+														simcards[tcp_ss9006_sim_generic_request->sim].led_on_time = 300;
+														simcards[tcp_ss9006_sim_generic_request->sim].led_off_time = 300;
+														// start led_on timer
+														x_timer_set_ms(simcards[tcp_ss9006_sim_generic_request->sim].timers.led_on, 0);
 													}
 												} else if (simcards[tcp_ss9006_sim_generic_request->sim].client < 0) {
 													// free
@@ -2084,6 +2144,13 @@ int main(int argc, char **argv)
 												if (simcards[tcp_ss9006_sim_generic_request->sim].client < 0) {
 													// free
 													LOG("%s: Bind SIM #%03lu succeeded\n", tcp_ss9006_clients[i].prefix, (unsigned long int)tcp_ss9006_sim_generic_request->sim);
+													// led on
+													if (use_led) {
+														sc_write_data.header.type = SIMCARD_CONTAINER_TYPE_LED;
+														sc_write_data.header.length = sizeof(sc_write_data.container.led);
+														sc_write_data.container.led = 1;
+														write(simcards[tcp_ss9006_sim_generic_request->sim].fd, &sc_write_data, sizeof(sc_write_data.header) + sc_write_data.header.length);
+													}
 													// set SIM owner client
 													simcards[tcp_ss9006_sim_generic_request->sim].client = i;
 													// notify sim state
@@ -2138,13 +2205,21 @@ int main(int argc, char **argv)
 												if (simcards[tcp_ss9006_sim_generic_request->sim].client == i) {
 													// this
 													LOG("%s: Unbind SIM #%03lu succeeded\n", tcp_ss9006_clients[i].prefix, (unsigned long int)tcp_ss9006_sim_generic_request->sim);
-													// led off
-													sc_write_data.header.type = SIMCARD_CONTAINER_TYPE_LED;
-													sc_write_data.header.length = sizeof(sc_write_data.container.led);
-													sc_write_data.container.led = 0;
-													write(simcards[tcp_ss9006_sim_generic_request->sim].fd, &sc_write_data, sizeof(sc_write_data.header) + sc_write_data.header.length);
 													// clear SIM owner client
 													simcards[tcp_ss9006_sim_generic_request->sim].client = -1;
+													// reset some flags
+													simcards[tcp_ss9006_sim_generic_request->sim].flags.reseting = 0;
+													// stop led_on timer
+													x_timer_stop(simcards[tcp_ss9006_sim_generic_request->sim].timers.led_on);
+													// stop led_off timer
+													x_timer_stop(simcards[tcp_ss9006_sim_generic_request->sim].timers.led_off);
+													// led off
+													if (use_led) {
+														sc_write_data.header.type = SIMCARD_CONTAINER_TYPE_LED;
+														sc_write_data.header.length = sizeof(sc_write_data.container.led);
+														sc_write_data.container.led = 0;
+														write(simcards[tcp_ss9006_sim_generic_request->sim].fd, &sc_write_data, sizeof(sc_write_data.header) + sc_write_data.header.length);
+													}
 													//
 													x_timer_stop(simcards[tcp_ss9006_sim_generic_request->sim].timers.wait_time);
 													//
@@ -2236,6 +2311,12 @@ int main(int argc, char **argv)
 													// this
 #endif
 													LOG("%s: Block SIM #%03lu succeeded\n", tcp_ss9006_clients[i].prefix, (unsigned long int)tcp_ss9006_sim_generic_request->sim);
+													// set led on/off timings
+													simcards[tcp_ss9006_sim_generic_request->sim].led_on_time = 100;
+													simcards[tcp_ss9006_sim_generic_request->sim].led_off_time = 100;
+													// start led_on timer
+													x_timer_set_ms(simcards[tcp_ss9006_sim_generic_request->sim].timers.led_on, 0);
+
 #if 0
 												} else if (simcards[tcp_ss9006_sim_generic_request->sim].client < 0) {
 													// free
@@ -2422,14 +2503,18 @@ int main(int argc, char **argv)
 						// traverse SIM binded with this client
 						for (j = 0; j < SIMBANK_SIMCARD_MAX; j++) {
 							if (simcards[j].client == i) {
+								LOG("%s: Unbind SIM #%03lu succeeded\n", tcp_ss9006_clients[i].prefix, (long unsigned int)j);
 								// unbind SIM from this client
 								simcards[j].client = -1;
-								LOG("%s: Unbind SIM #%03lu succeeded\n", tcp_ss9006_clients[i].prefix, (long unsigned int)j);
+								// reset some flags
+								simcards[j].flags.reseting = 0;
 								// led off
-								sc_write_data.header.type = SIMCARD_CONTAINER_TYPE_LED;
-								sc_write_data.header.length = sizeof(sc_write_data.container.led);
-								sc_write_data.container.led = 0;
-								write(simcards[j].fd, &sc_write_data, sizeof(sc_write_data.header) + sc_write_data.header.length);
+								if (use_led) {
+									sc_write_data.header.type = SIMCARD_CONTAINER_TYPE_LED;
+									sc_write_data.header.length = sizeof(sc_write_data.container.led);
+									sc_write_data.container.led = 0;
+									write(simcards[j].fd, &sc_write_data, sizeof(sc_write_data.header) + sc_write_data.header.length);
+								}
 								// start status timer
 								x_timer_set_ms(simcards[j].timers.status, 0);
 								// notify sim state
@@ -2491,10 +2576,12 @@ main_end:
 	for (i = 0; i < SIMBANK_SIMCARD_MAX; i++) {
 		if (simcards[i].fd > 0) {
 			// led off
-			sc_write_data.header.type = SIMCARD_CONTAINER_TYPE_LED;
-			sc_write_data.header.length = sizeof(sc_write_data.container.led);
-			sc_write_data.container.led = 0;
-			write(simcards[i].fd, &sc_write_data, sizeof(sc_write_data.header) + sc_write_data.header.length);
+			if (use_led) {
+				sc_write_data.header.type = SIMCARD_CONTAINER_TYPE_LED;
+				sc_write_data.header.length = sizeof(sc_write_data.container.led);
+				sc_write_data.container.led = 0;
+				write(simcards[i].fd, &sc_write_data, sizeof(sc_write_data.header) + sc_write_data.header.length);
+			}
 			// release reset signal
 			sc_write_data.header.type = SIMCARD_CONTAINER_TYPE_RESET;
 			sc_write_data.header.length = sizeof(sc_write_data.container.reset);

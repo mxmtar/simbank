@@ -1,3 +1,7 @@
+2014-07-09
+	1. Add control option for LED blinking.
+	2. Add control option for check STATUS vs SELECT.
+	3. Clear reseting flag on Unbind.
 2014-06-24
 	1. Add LED off disabling on SIM Unbind command.
 2014-06-19
