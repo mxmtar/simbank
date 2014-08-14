@@ -931,7 +931,7 @@ int main(int argc, char **argv)
 					simcard_restart(&simcards[i], 1000, sim_restart_flags | SIM_RESTART_FLAG_CLI);
 				}
 				// status
-				if (is_x_timer_enable(simcards[i].timers.status) && is_x_timer_fired(simcards[i].timers.status)) {
+				if ((simcards[i].state == SIMBANK_SIMCARD_STATE_IDLE) && is_x_timer_enable(simcards[i].timers.status) && is_x_timer_fired(simcards[i].timers.status)) {
 					// stop status timer
 					x_timer_stop(simcards[i].timers.status);
 					if (use_status_vs_select) {
@@ -991,7 +991,7 @@ int main(int argc, char **argv)
 			}
 			// flags
 			// reset
-			if (simcards[i].flags.reset) {
+			if ((simcards[i].state == SIMBANK_SIMCARD_STATE_IDLE) && (simcards[i].flags.reset)) {
 				// restart SIM-card now
 				simcard_restart(&simcards[i], 0, sim_restart_flags);
 			}
@@ -1086,6 +1086,7 @@ int main(int argc, char **argv)
 				tcp_ss9006_clients[i].recv_length = 0;
 				tcp_ss9006_clients[i].recv_wait = sizeof(struct ss9006_base_header);
 				tcp_ss9006_clients[i].xmit_length = 0;
+				tcp_ss9006_clients[i].flags.control = 0;
 				// traverse SIM binded with this client
 				for (j = 0; j < SIMBANK_SIMCARD_MAX; j++) {
 					if (simcards[j].client == i) {
