@@ -1,3 +1,6 @@
+2014-11-27
+	1. Reduce output to stdout in preparation for systemd service.
+	2. Clear control flag on client disconnected.
 2014-07-09
 	1. Add control option for LED blinking.
 	2. Add control option for check STATUS vs SELECT.
