@@ -1,3 +1,5 @@
+2016-08-10
+	1. Generate response 6f 00 for command without required data.
 2014-11-27
 	1. Reduce output to stdout in preparation for systemd service.
 	2. Clear control flag on client disconnected.

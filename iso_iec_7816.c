@@ -459,8 +459,9 @@ void iso_iec_7816_device_command_build(struct iso_iec_7816_device *device, void 
 
 	device->command.flags = flags;
 
-	memcpy(device->command.data_wr, data, length);
-	device->command.length_wr = length;
+	if ((device->command.length_wr = length)) {
+		memcpy(device->command.data_wr, data, length);
+	}
 
 	device->command.sw1 = 0;
 	device->command.sw2 = 0;

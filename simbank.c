@@ -1927,10 +1927,27 @@ int main(int argc, char **argv)
 																				iso_iec_7816_device_command_build(&simcards[tcp_ss9006_combined_chunk_header->sim].ifacedev, &tcp_ss9006_clients[i].recv_buf[j], 0, NULL, 0);
 																			} else if (get_iso_iec_7816_cla0x_ins_type(tcp_ss9006_clients[i].recv_buf[j + 1]) > 0) {
 																				// write
-																				iso_iec_7816_device_command_build(&simcards[tcp_ss9006_combined_chunk_header->sim].ifacedev, &tcp_ss9006_clients[i].recv_buf[j], CMD_WRITE, &tcp_ss9006_clients[i].recv_buf[j+5], tcp_ss9006_combined_chunk_header->length - 5);
+																				if ((tcp_ss9006_combined_chunk_header->length - 5) >= tcp_ss9006_clients[i].recv_buf[j + 4]) {
+																					iso_iec_7816_device_command_build(&simcards[tcp_ss9006_combined_chunk_header->sim].ifacedev, &tcp_ss9006_clients[i].recv_buf[j], CMD_WRITE, &tcp_ss9006_clients[i].recv_buf[j + 5], tcp_ss9006_clients[i].recv_buf[j + 4]);
+																				} else {
+																					// unknown
+																					LOG(LOG_WARNING, "%s: Command to SIM #%03lu failed - CLA=0x%02x INS=0x%02x required data (%lu/%lu)\n", tcp_ss9006_clients[i].prefix, (unsigned long int)tcp_ss9006_combined_chunk_header->sim, tcp_ss9006_clients[i].recv_buf[j], tcp_ss9006_clients[i].recv_buf[j + 1], (unsigned long int)(tcp_ss9006_combined_chunk_header->length - 5), (unsigned long int)tcp_ss9006_clients[i].recv_buf[j + 4]);
+																					// prepare command response
+																					tcp_ss9006_combined_header = (struct ss9006_combined_header *)&tcp_ss9006_clients[i].xmit_buf[tcp_ss9006_clients[i].xmit_length];
+																					tcp_ss9006_combined_header->cmd = SS9006_OPC_COMBINED;
+																					tcp_ss9006_combined_header->length = sizeof(struct ss9006_combined_chunk_header) + 2;
+																					tcp_ss9006_clients[i].xmit_length += sizeof(struct ss9006_combined_header);
+																					tcp_ss9006_combined_chunk_header = (struct ss9006_combined_chunk_header *)&tcp_ss9006_clients[i].xmit_buf[tcp_ss9006_clients[i].xmit_length];
+																					tcp_ss9006_combined_chunk_header->sim = i;
+																					tcp_ss9006_combined_chunk_header->length = 2;
+																					tcp_ss9006_clients[i].xmit_length += sizeof(struct ss9006_combined_chunk_header);
+																					tcp_ss9006_clients[i].xmit_buf[tcp_ss9006_clients[i].xmit_length + 0] = 0x6f;
+																					tcp_ss9006_clients[i].xmit_buf[tcp_ss9006_clients[i].xmit_length + 1] = 0x00;
+																					tcp_ss9006_clients[i].xmit_length += 2;
+																				}
 																			} else {
 																				// unknown
-																				LOG(LOG_WARNING, "%s: Command to SIM #%03lu failed - unknown command=0x%02x from class=0x%02x\n", tcp_ss9006_clients[i].prefix, (unsigned long int)tcp_ss9006_combined_chunk_header->sim, tcp_ss9006_clients[i].recv_buf[j], tcp_ss9006_clients[i].recv_buf[j + 1]);
+																				LOG(LOG_WARNING, "%s: Command to SIM #%03lu failed - CLA=0x%02x has unspecified INS=0x%02x\n", tcp_ss9006_clients[i].prefix, (unsigned long int)tcp_ss9006_combined_chunk_header->sim, tcp_ss9006_clients[i].recv_buf[j], tcp_ss9006_clients[i].recv_buf[j + 1]);
 																				// prepare command response
 																				tcp_ss9006_combined_header = (struct ss9006_combined_header *)&tcp_ss9006_clients[i].xmit_buf[tcp_ss9006_clients[i].xmit_length];
 																				tcp_ss9006_combined_header->cmd = SS9006_OPC_COMBINED;
@@ -1950,10 +1967,27 @@ int main(int argc, char **argv)
 																				iso_iec_7816_device_command_build(&simcards[tcp_ss9006_combined_chunk_header->sim].ifacedev, &tcp_ss9006_clients[i].recv_buf[j], 0, NULL, 0);
 																			} else if (get_3gpp_ts_101_221_cla8x_ins_type(tcp_ss9006_clients[i].recv_buf[j + 1]) > 0) {
 																				// write
-																				iso_iec_7816_device_command_build(&simcards[tcp_ss9006_combined_chunk_header->sim].ifacedev, &tcp_ss9006_clients[i].recv_buf[j], CMD_WRITE, &tcp_ss9006_clients[i].recv_buf[j+5], tcp_ss9006_combined_chunk_header->length - 5);
+																				if ((tcp_ss9006_combined_chunk_header->length - 5) >= tcp_ss9006_clients[i].recv_buf[j + 4]) {
+																					iso_iec_7816_device_command_build(&simcards[tcp_ss9006_combined_chunk_header->sim].ifacedev, &tcp_ss9006_clients[i].recv_buf[j], CMD_WRITE, &tcp_ss9006_clients[i].recv_buf[j + 5], tcp_ss9006_clients[i].recv_buf[j + 4]);
+																				} else {
+																					// unknown
+																					LOG(LOG_WARNING, "%s: Command to SIM #%03lu failed - CLA=0x%02x INS=0x%02x required data (%lu/%lu)\n", tcp_ss9006_clients[i].prefix, (unsigned long int)tcp_ss9006_combined_chunk_header->sim, tcp_ss9006_clients[i].recv_buf[j], tcp_ss9006_clients[i].recv_buf[j + 1], (unsigned long int)(tcp_ss9006_combined_chunk_header->length - 5), (unsigned long int)tcp_ss9006_clients[i].recv_buf[j + 4]);
+																					// prepare command response
+																					tcp_ss9006_combined_header = (struct ss9006_combined_header *)&tcp_ss9006_clients[i].xmit_buf[tcp_ss9006_clients[i].xmit_length];
+																					tcp_ss9006_combined_header->cmd = SS9006_OPC_COMBINED;
+																					tcp_ss9006_combined_header->length = sizeof(struct ss9006_combined_chunk_header) + 2;
+																					tcp_ss9006_clients[i].xmit_length += sizeof(struct ss9006_combined_header);
+																					tcp_ss9006_combined_chunk_header = (struct ss9006_combined_chunk_header *)&tcp_ss9006_clients[i].xmit_buf[tcp_ss9006_clients[i].xmit_length];
+																					tcp_ss9006_combined_chunk_header->sim = i;
+																					tcp_ss9006_combined_chunk_header->length = 2;
+																					tcp_ss9006_clients[i].xmit_length += sizeof(struct ss9006_combined_chunk_header);
+																					tcp_ss9006_clients[i].xmit_buf[tcp_ss9006_clients[i].xmit_length + 0] = 0x6f;
+																					tcp_ss9006_clients[i].xmit_buf[tcp_ss9006_clients[i].xmit_length + 1] = 0x00;
+																					tcp_ss9006_clients[i].xmit_length += 2;
+																				}
 																			} else {
 																				// unknown
-																				LOG(LOG_WARNING, "%s: Command to SIM #%03lu failed - unknown command=0x%02x from class=0x%02x\n", tcp_ss9006_clients[i].prefix, (unsigned long int)tcp_ss9006_combined_chunk_header->sim, tcp_ss9006_clients[i].recv_buf[j], tcp_ss9006_clients[i].recv_buf[j + 1]);
+																				LOG(LOG_WARNING, "%s: Command to SIM #%03lu failed - CLA=0x%02x has unspecified INS=0x%02x\n", tcp_ss9006_clients[i].prefix, (unsigned long int)tcp_ss9006_combined_chunk_header->sim, tcp_ss9006_clients[i].recv_buf[j], tcp_ss9006_clients[i].recv_buf[j + 1]);
 																				// prepare command response
 																				tcp_ss9006_combined_header = (struct ss9006_combined_header *)&tcp_ss9006_clients[i].xmit_buf[tcp_ss9006_clients[i].xmit_length];
 																				tcp_ss9006_combined_header->cmd = SS9006_OPC_COMBINED;
@@ -1974,10 +2008,27 @@ int main(int argc, char **argv)
 																				iso_iec_7816_device_command_build(&simcards[tcp_ss9006_combined_chunk_header->sim].ifacedev, &tcp_ss9006_clients[i].recv_buf[j], 0, NULL, 0);
 																			} else if (get_3gpp_ts_11_11_claa0_ins_type(tcp_ss9006_clients[i].recv_buf[j + 1]) > 0) {
 																				// write
-																				iso_iec_7816_device_command_build(&simcards[tcp_ss9006_combined_chunk_header->sim].ifacedev, &tcp_ss9006_clients[i].recv_buf[j], CMD_WRITE, &tcp_ss9006_clients[i].recv_buf[j+5], tcp_ss9006_combined_chunk_header->length - 5);
+																				if ((tcp_ss9006_combined_chunk_header->length - 5) >= tcp_ss9006_clients[i].recv_buf[j + 4]) {
+																					iso_iec_7816_device_command_build(&simcards[tcp_ss9006_combined_chunk_header->sim].ifacedev, &tcp_ss9006_clients[i].recv_buf[j], CMD_WRITE, &tcp_ss9006_clients[i].recv_buf[j + 5], tcp_ss9006_clients[i].recv_buf[j + 4]);
+																				} else {
+																					// unknown
+																					LOG(LOG_WARNING, "%s: Command to SIM #%03lu failed - CLA=0x%02x INS=0x%02x required data (%lu/%lu)\n", tcp_ss9006_clients[i].prefix, (unsigned long int)tcp_ss9006_combined_chunk_header->sim, tcp_ss9006_clients[i].recv_buf[j], tcp_ss9006_clients[i].recv_buf[j + 1], (unsigned long int)(tcp_ss9006_combined_chunk_header->length - 5), (unsigned long int)tcp_ss9006_clients[i].recv_buf[j + 4]);
+																					// prepare command response
+																					tcp_ss9006_combined_header = (struct ss9006_combined_header *)&tcp_ss9006_clients[i].xmit_buf[tcp_ss9006_clients[i].xmit_length];
+																					tcp_ss9006_combined_header->cmd = SS9006_OPC_COMBINED;
+																					tcp_ss9006_combined_header->length = sizeof(struct ss9006_combined_chunk_header) + 2;
+																					tcp_ss9006_clients[i].xmit_length += sizeof(struct ss9006_combined_header);
+																					tcp_ss9006_combined_chunk_header = (struct ss9006_combined_chunk_header *)&tcp_ss9006_clients[i].xmit_buf[tcp_ss9006_clients[i].xmit_length];
+																					tcp_ss9006_combined_chunk_header->sim = i;
+																					tcp_ss9006_combined_chunk_header->length = 2;
+																					tcp_ss9006_clients[i].xmit_length += sizeof(struct ss9006_combined_chunk_header);
+																					tcp_ss9006_clients[i].xmit_buf[tcp_ss9006_clients[i].xmit_length + 0] = 0x6f;
+																					tcp_ss9006_clients[i].xmit_buf[tcp_ss9006_clients[i].xmit_length + 1] = 0x00;
+																					tcp_ss9006_clients[i].xmit_length += 2;
+																				}
 																			} else {
 																				// unknown
-																				LOG(LOG_WARNING, "%s: Command to SIM #%03lu failed - unknown command=0x%02x from class=0x%02x\n", tcp_ss9006_clients[i].prefix, (unsigned long int)tcp_ss9006_combined_chunk_header->sim, tcp_ss9006_clients[i].recv_buf[j], tcp_ss9006_clients[i].recv_buf[j + 1]);
+																				LOG(LOG_WARNING, "%s: Command to SIM #%03lu failed - CLA=0x%02x has unspecified INS=0x%02x\n", tcp_ss9006_clients[i].prefix, (unsigned long int)tcp_ss9006_combined_chunk_header->sim, tcp_ss9006_clients[i].recv_buf[j], tcp_ss9006_clients[i].recv_buf[j + 1]);
 																				// prepare command response
 																				tcp_ss9006_combined_header = (struct ss9006_combined_header *)&tcp_ss9006_clients[i].xmit_buf[tcp_ss9006_clients[i].xmit_length];
 																				tcp_ss9006_combined_header->cmd = SS9006_OPC_COMBINED;
