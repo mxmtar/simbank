@@ -1496,7 +1496,7 @@ int main(int argc, char **argv)
 													LOG(LOG_ERR, "%s: gsm_sim_cmd_get_iccid_sm() failed\n", simcards[i].prefix);
 													if (abort) {
 														goto main_end;
-													} 
+													}
 													// restart SIM-card after 1000 ms
 													simcard_restart(&simcards[i], 1000, sim_restart_flags | SIM_RESTART_FLAG_CLI);
 													break;
@@ -1533,7 +1533,7 @@ int main(int argc, char **argv)
 													LOG(LOG_ERR, "%s: gsm_sim_cmd_get_spn_sm() failed\n", simcards[i].prefix);
 													if (abort) {
 														goto main_end;
-													} 
+													}
 													// restart SIM-card after 1000 ms
 													simcard_restart(&simcards[i], 1000, sim_restart_flags | SIM_RESTART_FLAG_CLI);
 													break;
@@ -1570,7 +1570,7 @@ int main(int argc, char **argv)
 													LOG(LOG_ERR, "%s: gsm_sim_cmd_get_imsi_sm() failed\n", simcards[i].prefix);
 													if (abort) {
 														goto main_end;
-													} 
+													}
 													// restart SIM-card after 1000 ms
 													simcard_restart(&simcards[i], 1000, sim_restart_flags | SIM_RESTART_FLAG_CLI);
 													break;
@@ -1607,7 +1607,7 @@ int main(int argc, char **argv)
 													LOG(LOG_ERR, "%s: gsm_sim_cmd_get_msisdn_sm() failed\n", simcards[i].prefix);
 													if (abort) {
 														goto main_end;
-													} 
+													}
 													// restart SIM-card after 1000 ms
 													simcard_restart(&simcards[i], 1000, sim_restart_flags | SIM_RESTART_FLAG_CLI);
 													break;
@@ -1644,7 +1644,7 @@ int main(int argc, char **argv)
 													LOG(LOG_ERR, "%s: gsm_sim_cmd_erase_sms_sm() failed\n", simcards[i].prefix);
 													if (abort) {
 														goto main_end;
-													} 
+													}
 													// restart SIM-card after 1000 ms
 													simcard_restart(&simcards[i], 1000, sim_restart_flags | SIM_RESTART_FLAG_CLI);
 													break;
@@ -2598,7 +2598,7 @@ int main(int argc, char **argv)
 					}
 				}
 			}
-		} else if (res > 0) {
+        } else if (res < 0) {
 			LOG(LOG_ERR, "select() failed - %s\n", strerror(errno));
 			goto main_end;
 		}
